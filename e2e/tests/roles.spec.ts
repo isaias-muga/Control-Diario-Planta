@@ -84,6 +84,7 @@ test.describe('el celular de recepción (role Recepcion), at 390px', () => {
     await rellenar(page.getByLabel(/^Litros/), '1.500');
     await rellenar(page.getByLabel(/^Acidez/), '17');
     await rellenar(page.getByLabel(/^Temp/), '5');
+    await page.getByRole('radio', { name: '1', exact: true }).click();
     await page.getByRole('button', { name: 'Revisar datos' }).click();
 
     await expect(page.getByRole('heading', { name: '¿Son correctos estos datos?' })).toBeVisible();
@@ -115,6 +116,7 @@ test.describe('el celular de recepción (role Recepcion), at 390px', () => {
     await rellenar(page.getByLabel(/^Litros/), '800');
     await rellenar(page.getByLabel(/^Acidez/), '16');
     await rellenar(page.getByLabel(/^Temp/), '5');
+    await page.getByRole('radio', { name: '1', exact: true }).click();
     await page.getByRole('button', { name: 'Revisar datos' }).click();
     await rellenar(page.getByLabel('Tu PIN de operario'), operario.pin);
     await page.getByRole('button', { name: 'Confirmar' }).click();
@@ -139,6 +141,7 @@ test.describe('el celular de recepción (role Recepcion), at 390px', () => {
     await rellenar(page.getByLabel(/^Litros/), '800');
     await rellenar(page.getByLabel(/^Acidez/), '16');
     await rellenar(page.getByLabel(/^Temp/), '5');
+    await page.getByRole('radio', { name: '1', exact: true }).click();
     await page.getByRole('button', { name: 'Revisar datos' }).click();
     const pinIncorrecto = operario.pin === '0000' ? '1111' : '0000';
 
@@ -163,6 +166,7 @@ test.describe('el celular de recepción (role Recepcion), at 390px', () => {
     await rellenar(page.getByLabel(/^Litros/), '800');
     await rellenar(page.getByLabel(/^Acidez/), '16');
     await rellenar(page.getByLabel(/^Temp/), '5');
+    await page.getByRole('radio', { name: '1', exact: true }).click();
     await page.getByRole('button', { name: 'Revisar datos' }).click();
     const pinIncorrecto = operario.pin === '0000' ? '1111' : '0000';
 
@@ -179,8 +183,8 @@ test.describe('el celular de recepción (role Recepcion), at 390px', () => {
   });
 });
 
-test.describe('Oficina (read only)', () => {
-  test('sees no way to create or change anything, and no Usuarios page', async ({ page, request }) => {
+test.describe('Oficina (the office clerk)', () => {
+  test('can register recepciones but sees no way to create proveedores or change settings, and no Usuarios page', async ({ page, request }) => {
     const persona = await crearUsuarioListoPorApi(request, 'Oficina');
     await loginComo(page, persona);
     await expect(page.getByRole('heading', { name: 'Resumen de recepciones' })).toBeVisible();
@@ -191,11 +195,12 @@ test.describe('Oficina (read only)', () => {
 
     await page.getByRole('link', { name: 'Recepciones', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Recepciones', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Registrar recepción/ })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: '+ Registrar recepción' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Carga rápida' })).toHaveCount(0);
 
     await irAConfiguracion(page);
     await expect(page.getByLabel(/^Acidez máxima/)).toBeDisabled();
+    await expect(page.getByLabel('Cantidad de silos')).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Guardar' })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Ajustes' }).click();
@@ -205,7 +210,7 @@ test.describe('Oficina (read only)', () => {
     await expect(page).toHaveURL(/\/resumen$/);
   });
 
-  test('the server refuses the changes whatever the page shows', async ({ request }) => {
+  test('the server still refuses every change but registering a recepción, whatever the page shows', async ({ request }) => {
     const persona = await crearUsuarioListoPorApi(request, 'Oficina');
     const login = await request.post('/api/Auth/login', { data: { username: persona.username, password: PASSWORD_PROPIA } });
     const headers = { Authorization: `Bearer ${(await login.json()).token}` };
@@ -213,8 +218,49 @@ test.describe('Oficina (read only)', () => {
     expect((await request.get('/api/Proveedores', { headers })).status()).toBe(200);
     expect((await request.post('/api/Proveedores', { headers, data: { nombre: 'No' } })).status()).toBe(403);
     expect((await request.put('/api/Configuracion/calidad', { headers, data: { acidezMaxima: 19, temperaturaMaxima: 20, aguaMaxima: 0, version: 'x' } })).status()).toBe(403);
-    expect((await request.post(`/api/Proveedores/${crypto.randomUUID()}/recepciones`, { headers, data: {} })).status()).toBe(403);
+    // Registering is allowed for her (this proveedor does not exist: 404, not 403)
+    expect((await request.post(`/api/Proveedores/${crypto.randomUUID()}/recepciones`, { headers, data: {} })).status()).toBe(404);
     expect((await request.get('/api/Operarios', { headers })).status()).toBe(403);
+  });
+});
+
+test.describe('Oficina registers on a PC (1366px)', () => {
+  test.use({ viewport: { width: 1366, height: 768 } });
+
+  test('registers a recepción end to end with her own user (no PIN) and the audit says who loaded it', async ({ page, request }) => {
+    const proveedor = await crearProveedorPorApi(request);
+    const persona = await crearUsuarioListoPorApi(request, 'Oficina');
+    const ticket = ticketUnico();
+    await loginComo(page, persona);
+    await expect(page.getByRole('heading', { name: 'Resumen de recepciones' })).toBeVisible();
+
+    await page.getByRole('link', { name: 'Recepciones', exact: true }).click();
+    await page.getByRole('link', { name: '+ Registrar recepción' }).click();
+    await expect(page.getByRole('heading', { name: 'Nueva recepción' })).toBeVisible();
+    await page.getByRole('combobox', { name: /Proveedor/ }).click();
+    await page.getByRole('option', { name: proveedor }).click();
+    await expect(page.getByRole('radio', { name: '3', exact: true })).toBeVisible();
+    await rellenar(page.getByLabel(/^Ticket/), String(ticket));
+    await rellenar(page.getByLabel(/^Litros/), '2.200');
+    await rellenar(page.getByLabel(/^Acidez/), '16');
+    await rellenar(page.getByLabel(/^Temp/), '5');
+    await page.getByRole('radio', { name: '2', exact: true }).click();
+    await page.getByRole('button', { name: 'Revisar datos' }).click();
+
+    await expect(page.getByRole('heading', { name: '¿Son correctos estos datos?' })).toBeVisible();
+    await expect(page.getByLabel('Tu PIN de operario')).toHaveCount(0); // no PIN for the office
+    await page.getByRole('button', { name: 'Confirmar' }).click();
+    await expect(page.getByRole('heading', { name: 'Recepción guardada' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Nueva recepción' })).toBeVisible();
+    await page.getByRole('link', { name: 'Ir a Recepciones' }).click();
+
+    await expect(page.getByRole('cell', { name: String(ticket), exact: true })).toBeVisible();
+    const headers = await cabecerasAutenticadas(request);
+    const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+    const listado = await (await request.get(`/api/Recepciones?desde=${hoy}&hasta=${hoy}&ticket=${ticket}`, { headers })).json();
+    expect(listado.items).toHaveLength(1);
+    expect(listado.items[0].registradoPor).toBe(persona.nombre);
+    expect(listado.items[0].silo).toBe(2);
   });
 });
 

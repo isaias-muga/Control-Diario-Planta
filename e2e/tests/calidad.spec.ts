@@ -106,7 +106,7 @@ test('calidad: the API rejects a limits update without version (400) and with a 
   expect(login.status()).toBe(200);
   const headers = { Authorization: `Bearer ${(await login.json()).token}` };
   const actuales = await (await request.get('/api/Configuracion/calidad', { headers })).json();
-  const limites = { acidezMaxima: 19, temperaturaMaxima: actuales.temperaturaMaxima, aguaMaxima: actuales.aguaMaxima };
+  const limites = { acidezMaxima: 19, temperaturaMaxima: actuales.temperaturaMaxima, aguaMaxima: actuales.aguaMaxima, cantidadSilos: actuales.cantidadSilos };
 
   try {
     const sinVersion = await request.put('/api/Configuracion/calidad', { headers, data: limites });

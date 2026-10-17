@@ -22,8 +22,8 @@ namespace DairyControl.Application.Tests
                 LimitesCalidad.Create(19m, 20m, 0m),
                 actualizadoEn ?? new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc));
 
-        private static ActualizarLimitesCalidadDto Dto(string? version, decimal acidez = 18m) =>
-            new() { AcidezMaxima = acidez, TemperaturaMaxima = 8m, AguaMaxima = 1.5m, Version = version };
+        private static ActualizarLimitesCalidadDto Dto(string? version, decimal acidez = 18m, int cantidadSilos = 3) =>
+            new() { AcidezMaxima = acidez, TemperaturaMaxima = 8m, AguaMaxima = 1.5m, CantidadSilos = cantidadSilos, Version = version };
 
         [Fact]
         public async Task GetAsync_ConfiguracionExists_ReturnsLimitsLastUpdateAndVersion()
@@ -160,6 +160,58 @@ namespace DairyControl.Application.Tests
 
             // Assert
             Assert.Null(result);
+            mockRepo.Verify(r => r.UpdateAsync(It.IsAny<ConfiguracionCalidad>(), It.IsAny<byte[]>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task GetAsync_ReturnsTheNumberOfSilos()
+        {
+            // Arrange
+            var mockRepo = new Mock<IConfiguracionCalidadRepository>();
+            mockRepo.Setup(r => r.GetAsync()).ReturnsAsync(new ConfiguracionLeida(ConfiguracionCalidad.Crear(LimitesCalidad.Predeterminados, new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc), 5), VersionLeida));
+
+            // Act
+            var result = await new ConfiguracionCalidadAppService(mockRepo.Object, Reloj).GetAsync();
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(5, result.CantidadSilos);
+        }
+
+        [Fact]
+        public async Task ActualizarAsync_NewNumberOfSilos_IsSavedAndReturned()
+        {
+            // Arrange
+            var configuracion = Configuracion();
+            var mockRepo = new Mock<IConfiguracionCalidadRepository>();
+            mockRepo.Setup(r => r.GetAsync()).ReturnsAsync(new ConfiguracionLeida(configuracion, VersionLeida));
+            mockRepo.Setup(r => r.UpdateAsync(configuracion, It.IsAny<byte[]>())).ReturnsAsync(VersionNueva);
+
+            // Act
+            var result = await new ConfiguracionCalidadAppService(mockRepo.Object, Reloj).ActualizarAsync(Dto(VersionLeidaBase64, cantidadSilos: 4));
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(4, result.CantidadSilos);
+            Assert.Equal(4, configuracion.CantidadSilos);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(21)]
+        public async Task ActualizarAsync_InvalidNumberOfSilos_ThrowsOnCantidadSilosAndNeverSaves(int cantidad)
+        {
+            // Arrange
+            var configuracion = Configuracion();
+            var mockRepo = new Mock<IConfiguracionCalidadRepository>();
+            mockRepo.Setup(r => r.GetAsync()).ReturnsAsync(new ConfiguracionLeida(configuracion, VersionLeida));
+
+            // Act
+            var ex = await Assert.ThrowsAsync<ReglaDeNegocioException>(() =>
+                new ConfiguracionCalidadAppService(mockRepo.Object, Reloj).ActualizarAsync(Dto(VersionLeidaBase64, cantidadSilos: cantidad)));
+
+            // Assert
+            Assert.Equal("cantidadSilos", ex.Campo);
             mockRepo.Verify(r => r.UpdateAsync(It.IsAny<ConfiguracionCalidad>(), It.IsAny<byte[]>()), Times.Never);
         }
     }

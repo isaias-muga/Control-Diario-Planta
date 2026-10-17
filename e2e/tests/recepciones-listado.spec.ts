@@ -1,5 +1,14 @@
 import { expect, test, type Page } from '../fixtures';
-import { crearProveedor, loginYEsperarResumen, registrarRecepcion, rellenar, ticketUnico } from '../helpers';
+import {
+  confirmarRecepcion,
+  crearProveedor,
+  llenarRecepcion,
+  loginYEsperarResumen,
+  registrarRecepcion,
+  rellenar,
+  revisarDatos,
+  ticketUnico,
+} from '../helpers';
 
 const ZONA_PLANTA = 'America/Argentina/Buenos_Aires';
 
@@ -13,67 +22,63 @@ async function abrirRecepciones(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Recepciones', exact: true })).toBeVisible();
 }
 
-/** Opens "Registrar recepción" on the Recepciones page and chooses the proveedor in the form. */
-async function abrirRegistroConProveedor(page: Page, nombre: string) {
-  await page.getByRole('button', { name: '+ Registrar recepción' }).click();
-  const dialog = page.getByRole('dialog');
-  const selector = dialog.getByRole('combobox', { name: /Proveedor/ });
-  await expect(selector).toBeFocused(); // the dialog's initial focus: wait for it before touching the form
-  await selector.click();
-  await page.getByRole('option', { name: nombre }).click();
-  return dialog;
+/** Opens "+ Registrar recepción" on the Recepciones page and chooses the proveedor in the flow. */
+async function abrirRegistroConProveedor(page: Page, nombre: string): Promise<void> {
+  await page.getByRole('link', { name: '+ Registrar recepción' }).click();
+  await expect(page.getByRole('heading', { name: 'Nueva recepción' })).toBeVisible();
+  await elegirProveedor(page, nombre);
+  await expect(page.getByRole('radio', { name: '1', exact: true })).toBeVisible();
 }
 
-async function completarLectura(dialog: ReturnType<Page['getByRole']>, litros: number): Promise<void> {
-  await rellenar(dialog.getByLabel(/^Litros/), String(litros));
-  await rellenar(dialog.getByLabel(/^Acidez/), '16');
-  await rellenar(dialog.getByLabel(/^Temperatura/), '5');
+async function elegirProveedor(page: Page, nombre: string): Promise<void> {
+  await page.getByRole('combobox', { name: /Proveedor/ }).click();
+  await page.getByRole('option', { name: nombre }).click();
 }
 
 test.beforeEach(async ({ page }) => {
   await loginYEsperarResumen(page);
 });
 
-test('recepciones: the list shows a recepción registered from the page, with the proveedor chosen in the form', async ({ page }) => {
+test('recepciones: the list shows a recepción registered from the page, with the proveedor chosen in the flow', async ({ page }) => {
   const nombre = await crearProveedor(page);
   const ticket = ticketUnico();
   await abrirRecepciones(page);
 
-  const dialog = await abrirRegistroConProveedor(page, nombre);
-  await completarLectura(dialog, 2150);
-  await rellenar(dialog.getByLabel(/^Ticket/), String(ticket));
-  await expect(dialog.getByText('Litros reales:')).toContainText('2.150');
-  await dialog.getByRole('button', { name: 'Registrar', exact: true }).click();
+  await abrirRegistroConProveedor(page, nombre);
+  await llenarRecepcion(page, { litros: 2150, acidez: 16, temperatura: 5, ticket });
+  await revisarDatos(page);
+  await confirmarRecepcion(page);
+  await page.getByRole('link', { name: 'Ir a Recepciones' }).click();
 
-  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('cell', { name: String(ticket), exact: true })).toBeVisible();
   const fila = page.getByRole('row', { name: new RegExp(`${ticket}.*${nombre}`) });
   await expect(fila.getByRole('link', { name: nombre })).toBeVisible();
   await expect(fila.getByText('OK', { exact: true })).toBeVisible();
 });
 
-test('recepciones: "Registrar y cargar otra" registers two with consecutive suggested tickets', async ({ page }) => {
+test('recepciones: "Nueva recepción" registers a second one with the next suggested ticket', async ({ page }) => {
   const nombre = await crearProveedor(page);
   await abrirRecepciones(page);
 
-  const dialog = await abrirRegistroConProveedor(page, nombre);
-  const campoTicket = dialog.getByLabel(/^Ticket/);
-  await expect(dialog.getByText('Siguiente número sugerido; se puede cambiar.')).toBeVisible();
+  await abrirRegistroConProveedor(page, nombre);
+  const campoTicket = page.getByLabel(/^Ticket/);
+  await expect(campoTicket).toHaveValue(/^\d+$/); // the suggested number arrived
   const primero = Number(await campoTicket.inputValue());
   expect(primero).toBeGreaterThan(0);
+  await llenarRecepcion(page, { litros: 1000, acidez: 16, temperatura: 5, ticket: primero });
+  await revisarDatos(page);
+  await confirmarRecepcion(page);
 
-  await completarLectura(dialog, 1000);
-  await dialog.getByRole('button', { name: 'Registrar y cargar otra' }).click();
+  await page.getByRole('button', { name: 'Nueva recepción' }).click();
+  await expect(page.getByLabel(/^Ticket/)).toHaveValue(String(primero + 1));
+  await expect(page.getByLabel(/^Litros/)).toHaveValue('');
+  await elegirProveedor(page, nombre);
+  await expect(page.getByRole('radio', { name: '1', exact: true })).toBeVisible();
+  await llenarRecepcion(page, { litros: 1200, acidez: 16, temperatura: 5, ticket: primero + 1 });
+  await revisarDatos(page);
+  await confirmarRecepcion(page);
+  await page.getByRole('link', { name: 'Ir a Recepciones' }).click();
 
-  // The dialog stays open, the lectura is cleared and the next ticket is suggested
-  await expect(campoTicket).toHaveValue(String(primero + 1));
-  await expect(dialog.getByLabel(/^Litros/)).toHaveValue('');
-  await expect(dialog.getByLabel(/^Litros/)).toBeFocused(); // ready for the next lectura
-  await expect(page.getByRole('dialog')).toHaveCount(1);
-  await completarLectura(dialog, 1200);
-  await dialog.getByRole('button', { name: 'Registrar', exact: true }).click();
-
-  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('cell', { name: String(primero), exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: String(primero + 1), exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: nombre })).toHaveCount(2);

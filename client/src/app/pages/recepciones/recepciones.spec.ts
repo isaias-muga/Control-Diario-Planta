@@ -7,9 +7,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { of } from 'rxjs';
 import { ListadoRecepciones } from '../../models/recepcion-listado';
-import { RegistrarRecepcionDialog } from '../../components/registrar-recepcion-dialog/registrar-recepcion-dialog';
 import { Recepciones } from './recepciones';
 
 registerLocaleData(localeEsAr);
@@ -88,53 +86,10 @@ describe('Recepciones page', () => {
     expect(texto('.subtitulo')).toBe('14/10/2026 · Tambo Don Pedro');
   });
 
-  it('opens the registration dialog without a proveedor (it is chosen in the form)', async () => {
-    const abrirDialogo = vi.spyOn(RegistrarRecepcionDialog, 'abrir').mockReturnValue(of(false));
-    await abrir();
-
-    (el().querySelector('.encabezado button') as HTMLButtonElement).click();
-
-    expect(texto('.encabezado button')).toBe('+ Registrar recepción');
-    expect(abrirDialogo).toHaveBeenCalledExactlyOnceWith(expect.anything(), {});
-  });
-
-  it('links to the quick reception flow', async () => {
-    await abrir();
-
-    const enlace = el().querySelector('.encabezado a') as HTMLAnchorElement;
-
-    expect(texto('.encabezado a')).toBe('Carga rápida');
-    expect(enlace.getAttribute('href')).toBe('/recepciones/carga');
-  });
-
-  it('reloads the list after something was registered', async () => {
-    vi.spyOn(RegistrarRecepcionDialog, 'abrir').mockReturnValue(of(true));
-    await abrir();
-
-    (el().querySelector('.encabezado button') as HTMLButtonElement).click();
-
-    http.expectOne((r) => r.url.endsWith('/Recepciones')).flush(vacio);
-  });
-
-  it('does not reload when the dialog is closed without registering', async () => {
-    vi.spyOn(RegistrarRecepcionDialog, 'abrir').mockReturnValue(of(false));
-    await abrir();
-
-    (el().querySelector('.encabezado button') as HTMLButtonElement).click();
-
-    http.expectNone((r) => r.url.endsWith('/Recepciones'));
-  });
-
-  it('offers the registration buttons to an admin', async () => {
-    await abrir();
-
-    expect(Array.from(el().querySelectorAll('.encabezado button, .encabezado a')).map((b) => b.textContent?.trim())).toEqual(['Carga rápida', '+ Registrar recepción']);
-  });
-
-  it('offers no registration to the office (read only), but still lists', async () => {
+  it.each(['Admin', 'Oficina'] as const)('offers one "+ Registrar recepción" link to the registration flow to %s', async (rol) => {
     TestBed.resetTestingModule();
     cerrarSesionDePrueba();
-    iniciarSesionDePrueba('Oficina');
+    iniciarSesionDePrueba(rol);
     TestBed.configureTestingModule({
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: LOCALE_ID, useValue: 'es-AR' }],
     });
@@ -142,8 +97,15 @@ describe('Recepciones page', () => {
 
     await abrir();
 
-    expect(el().querySelector('.encabezado button')).toBeNull();
-    expect(el().querySelector('.encabezado a')).toBeNull();
-    expect(texto('h2')).toBe('Recepciones');
+    const botones = Array.from(el().querySelectorAll('.encabezado button, .encabezado a'));
+    expect(botones.map((b) => b.textContent?.trim())).toEqual(['+ Registrar recepción']);
+    expect(botones[0].getAttribute('href')).toBe('/recepciones/carga');
   });
+
+  it('has no registration dialog and no "Carga rápida" duplicate', async () => {
+    await abrir();
+
+    expect(el().textContent).not.toContain('Carga rápida');
+  });
+
 });

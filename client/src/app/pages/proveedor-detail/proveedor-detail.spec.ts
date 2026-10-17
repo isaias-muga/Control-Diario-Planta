@@ -11,7 +11,6 @@ import { MatDialog } from '@angular/material/dialog';
 import { of } from 'rxjs';
 import { ProveedorDetail } from './proveedor-detail';
 import { RecepcionesPanel } from '../../components/recepciones-panel/recepciones-panel';
-import { RegistrarRecepcionDialog } from '../../components/registrar-recepcion-dialog/registrar-recepcion-dialog';
 import { ListadoRecepciones } from '../../models/recepcion-listado';
 import { Proveedor } from '../../models/proveedor';
 import { hoyEnPlanta, rangoDeAtajo } from '../../utils/periodos';
@@ -93,7 +92,7 @@ describe('ProveedorDetail', () => {
     await cargarPanel();
 
     expect(el().querySelector('h2')?.textContent).toBe('Tambo Test');
-    expect(el().querySelector('.page-header button')?.textContent?.trim()).toBe('Registrar recepción');
+    expect(el().querySelector('.page-header a')?.textContent?.trim()).toBe('Registrar recepción');
   });
 
   it('asks for this proveedor only, not for the whole list', async () => {
@@ -146,31 +145,13 @@ describe('ProveedorDetail', () => {
     expect(el().querySelector('.form-error')?.textContent).toContain('No se pudo cargar el proveedor.');
   });
 
-  it('opens the registration dialog for this proveedor', async () => {
-    const abrir = vi.spyOn(RegistrarRecepcionDialog, 'abrir').mockReturnValue(of(false));
+  it('links to the registration flow with this proveedor chosen', async () => {
     await cargarPanel();
 
-    (el().querySelector('.page-header button') as HTMLButtonElement).click();
+    const enlace = el().querySelector('.page-header a') as HTMLAnchorElement;
 
-    expect(abrir).toHaveBeenCalledExactlyOnceWith(TestBed.inject(MatDialog), { proveedorId: 'test-id' });
-  });
-
-  it('reloads the list when something was registered', async () => {
-    vi.spyOn(RegistrarRecepcionDialog, 'abrir').mockReturnValue(of(true));
-    await cargarPanel();
-
-    (el().querySelector('.page-header button') as HTMLButtonElement).click();
-
-    http.expectOne((r) => r.url.endsWith('/Recepciones')).flush(vacio);
-  });
-
-  it('does not reload the list when the dialog is closed without registering', async () => {
-    vi.spyOn(RegistrarRecepcionDialog, 'abrir').mockReturnValue(of(false));
-    await cargarPanel();
-
-    (el().querySelector('.page-header button') as HTMLButtonElement).click();
-
-    http.expectNone((r) => r.url.endsWith('/Recepciones'));
+    expect(enlace.textContent?.trim()).toBe('Registrar recepción');
+    expect(enlace.getAttribute('href')).toBe('/recepciones/carga?proveedor=test-id');
   });
 
   it('loads again when the route id changes', async () => {
@@ -187,7 +168,7 @@ describe('ProveedorDetail', () => {
     http.match((r) => r.url.endsWith('/Configuracion/calidad')).forEach((r) => r.flush(LIMITES));
   });
 
-  it('offers no way to register a recepción to the office (read only)', async () => {
+  it('offers the registration link to the office too (the clerk records the lab measurement)', async () => {
     TestBed.resetTestingModule();
     cerrarSesionDePrueba();
     iniciarSesionDePrueba('Oficina');
@@ -206,6 +187,6 @@ describe('ProveedorDetail', () => {
     http.match(() => true); // the panel's own requests are not what this test is about
 
     expect(el().querySelector('h2')?.textContent).toBe('Tambo Test');
-    expect(el().querySelector('.page-header button')).toBeNull();
+    expect(el().querySelector('.page-header a')?.getAttribute('href')).toBe('/recepciones/carga?proveedor=test-id');
   });
 });

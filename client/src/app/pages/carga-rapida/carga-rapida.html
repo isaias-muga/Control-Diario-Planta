@@ -74,22 +74,44 @@
             }
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Silo (opcional)</mat-label>
-            <input matInput appNumero="entero" id="silo" formControlName="silo" />
-            @if (invalid('silo')) {
-              <mat-error>{{ errorNumero(form.controls.silo, 'Entero entre 1 y 20.') }}</mat-error>
-            }
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Ticket</mat-label>
-            <input matInput appNumero="entero" id="ticket" formControlName="ticket" (input)="errorCarga.set(null)" />
-            @if (invalid('ticket')) {
-              <mat-error>{{ errorNumero(form.controls.ticket, 'Requerido. Entero entre 1 y 2.147.483.647.') }}</mat-error>
-            }
-          </mat-form-field>
         </div>
+
+        <div class="silo" role="group" aria-labelledby="etiqueta-silo">
+          <span id="etiqueta-silo" class="etiqueta-silo">Silo <span aria-hidden="true">*</span></span>
+          @if (silos().length > 0) {
+            <div class="silos" role="radiogroup" aria-labelledby="etiqueta-silo">
+              @for (n of silos(); track n) {
+                <button
+                  type="button"
+                  class="silo-boton"
+                  role="radio"
+                  [attr.aria-checked]="form.controls.silo.value === n"
+                  [class.elegido]="form.controls.silo.value === n"
+                  (click)="elegirSilo(n)"
+                >
+                  {{ n }}
+                </button>
+              }
+            </div>
+            @if (invalid('silo')) {
+              <p class="error-silo" role="alert">Elegí el silo.</p>
+            }
+          } @else if (limitesError()) {
+            <p class="error" role="alert">No se pudieron cargar los silos.</p>
+            <button mat-stroked-button type="button" (click)="cargarConfiguracion()">Reintentar</button>
+          } @else {
+            <!-- Not buttons yet: they only exist once the plant configuration has arrived -->
+            <p class="cargando-silos" aria-busy="true">Cargando silos…</p>
+          }
+        </div>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Ticket</mat-label>
+          <input matInput appNumero="entero" id="ticket" formControlName="ticket" (input)="errorCarga.set(null)" />
+          @if (invalid('ticket')) {
+            <mat-error>{{ errorNumero(form.controls.ticket, 'Requerido. Entero entre 1 y 2.147.483.647.') }}</mat-error>
+          }
+        </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>Observaciones (opcional)</mat-label>
@@ -158,7 +180,7 @@
           </div>
           <div class="fila">
             <dt>Silo</dt>
-            <dd>{{ form.controls.silo.value ?? '—' }}</dd>
+            <dd>{{ form.controls.silo.value }}</dd>
           </div>
           <div class="fila">
             <dt>Ticket</dt>

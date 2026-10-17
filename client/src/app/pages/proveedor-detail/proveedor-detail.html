@@ -12,10 +12,8 @@
 } @else if (proveedor(); as p) {
   <div class="page-header">
     <h2>{{ p.nombre }}</h2>
-    @if (auth.esAdmin()) {
-      <button mat-flat-button type="button" (click)="abrirRegistro(p.id)">
-        Registrar recepción
-      </button>
+    @if (auth.puedeRegistrar()) {
+      <a mat-flat-button routerLink="/recepciones/carga" [queryParams]="{ proveedor: p.id }">Registrar recepción</a>
     }
   </div>
 

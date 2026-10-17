@@ -107,5 +107,39 @@ namespace DairyControl.Infrastructure.Tests
             Assert.NotNull(guardada);
             Assert.Equal(LimitesCalidad.Create(21m, 22m, 1m), guardada.Configuracion.Limites);
         }
+
+        [Fact]
+        public async Task GetAsync_NewDatabase_HasThreeSilos()
+        {
+            // Arrange
+            using var context = NuevoContexto();
+
+            // Act
+            var leida = await new ConfiguracionCalidadRepository(context).GetAsync();
+
+            // Assert
+            Assert.NotNull(leida);
+            Assert.Equal(3, leida.Configuracion.CantidadSilos);
+        }
+
+        [Fact]
+        public async Task UpdateAsync_NewNumberOfSilos_IsPersisted()
+        {
+            // Arrange
+            using var context = NuevoContexto();
+            var repository = new ConfiguracionCalidadRepository(context);
+            var leida = await repository.GetAsync();
+            Assert.NotNull(leida);
+            leida.Configuracion.Actualizar(LimitesCalidad.Predeterminados, 4, Ahora);
+
+            // Act
+            await repository.UpdateAsync(leida.Configuracion, leida.Version);
+
+            // Assert
+            using var lectura = NuevoContexto();
+            var guardada = await new ConfiguracionCalidadRepository(lectura).GetAsync();
+            Assert.NotNull(guardada);
+            Assert.Equal(4, guardada.Configuracion.CantidadSilos);
+        }
     }
 }

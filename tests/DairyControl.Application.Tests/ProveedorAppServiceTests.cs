@@ -22,6 +22,7 @@ namespace DairyControl.Application.Tests
             public Mock<IProveedorRepository> Proveedores { get; } = new();
             public Mock<IRecepcionRepository> Recepciones { get; } = new();
             public Mock<IProveedorQueries> Queries { get; } = new();
+            public Mock<IConfiguracionCalidadRepository> Configuracion { get; } = new();
             public Mock<IUsuarioActual> Actual { get; } = new();
             public Mock<IUsuarioRepository> Usuarios { get; } = new();
             public Mock<IOperarioRepository> Operarios { get; } = new();
@@ -31,6 +32,8 @@ namespace DairyControl.Application.Tests
 
             public Escenario(bool proveedorExiste = true, int cantidad = 1, RolUsuario rol = RolUsuario.Admin)
             {
+                Configuracion.Setup(c => c.GetAsync()).ReturnsAsync(
+                    new ConfiguracionLeida(ConfiguracionCalidad.Crear(LimitesCalidad.Predeterminados, new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc), cantidadSilos: 3), [1]));
                 Actual.Setup(a => a.Id).Returns(UsuarioId);
                 Actual.Setup(a => a.Rol).Returns(rol);
                 HasherPin.Setup(h => h.Hash(It.IsAny<string>())).Returns<string>(pin => "hash-" + pin);
@@ -40,7 +43,7 @@ namespace DairyControl.Application.Tests
                     .ReturnsAsync(new ProveedorDto { Id = ProveedorId, Nombre = "Proveedor Test", CantidadRecepciones = cantidad });
             }
 
-            public ProveedorAppService Servicio() => new(Proveedores.Object, Recepciones.Object, Queries.Object, Actual.Object,
+            public ProveedorAppService Servicio() => new(Proveedores.Object, Recepciones.Object, Queries.Object, Configuracion.Object, Actual.Object,
                 new VerificacionPinService(Usuarios.Object, Operarios.Object, HasherPin.Object, Actual.Object, Reloj), Reloj);
 
             public void VerificarNadaGuardado() =>
@@ -53,6 +56,7 @@ namespace DairyControl.Application.Tests
             Temperatura = 5m,
             Litros = 1000m,
             FechaHora = FechaValida,
+            Silo = 1,
             Ticket = ticket
         };
 
@@ -246,6 +250,100 @@ namespace DairyControl.Application.Tests
             Assert.Equal(proveedor.Id, opcion.Id);
             Assert.Equal("Tambo Don Pedro", opcion.Nombre);
             escenario.Queries.Verify(q => q.GetAllAsync(), Times.Never);
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(3)]
+        public async Task RegistrarRecepcionAsync_SiloWithinTheConfiguredCount_IsRegistered(int silo)
+        {
+            // Arrange
+            var escenario = new Escenario();
+            var dto = Dto();
+            dto.Silo = silo;
+
+            // Act
+            var result = await escenario.Servicio().RegistrarRecepcionAsync(escenario.ProveedorId, dto);
+
+            // Assert
+            Assert.NotNull(result);
+            escenario.Recepciones.Verify(r => r.AddAsync(It.Is<RecepcionLeche>(x => x.Silo == silo)), Times.Once);
+        }
+
+        [Fact]
+        public async Task RegistrarRecepcionAsync_MissingSilo_ThrowsOnSiloAndNeverSaves()
+        {
+            // Arrange
+            var escenario = new Escenario();
+            var dto = Dto();
+            dto.Silo = null;
+
+            // Act
+            var ex = await Assert.ThrowsAsync<ReglaDeNegocioException>(() => escenario.Servicio().RegistrarRecepcionAsync(escenario.ProveedorId, dto));
+
+            // Assert
+            Assert.Equal("silo", ex.Campo);
+            Assert.Equal("El silo es obligatorio.", ex.Message);
+            escenario.VerificarNadaGuardado();
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(4)]
+        [InlineData(21)]
+        [InlineData(-1)]
+        public async Task RegistrarRecepcionAsync_SiloAboveTheCountOrBelowOne_ThrowsOnSiloAndNeverSaves(int silo)
+        {
+            // Arrange: the plant has 3 silos
+            var escenario = new Escenario();
+            var dto = Dto();
+            dto.Silo = silo;
+
+            // Act
+            var ex = await Assert.ThrowsAsync<ReglaDeNegocioException>(() => escenario.Servicio().RegistrarRecepcionAsync(escenario.ProveedorId, dto));
+
+            // Assert
+            Assert.Equal("silo", ex.Campo);
+            Assert.Equal("El silo debe estar entre 1 y 3.", ex.Message);
+            escenario.VerificarNadaGuardado();
+        }
+
+        [Fact]
+        public async Task RegistrarRecepcionAsync_TheCountIsRead_SoAFourthSiloWorksOnceThePlantHasFour()
+        {
+            // Arrange
+            var escenario = new Escenario();
+            escenario.Configuracion.Setup(c => c.GetAsync()).ReturnsAsync(
+                new ConfiguracionLeida(ConfiguracionCalidad.Crear(LimitesCalidad.Predeterminados, new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc), cantidadSilos: 4), [1]));
+            var dto = Dto();
+            dto.Silo = 4;
+
+            // Act
+            var result = await escenario.Servicio().RegistrarRecepcionAsync(escenario.ProveedorId, dto);
+
+            // Assert
+            Assert.NotNull(result);
+        }
+
+        [Fact]
+        public async Task RegistrarRecepcionAsync_ByOficinaWithoutPin_StampsHerUserAndAsksNoPin()
+        {
+            // Arrange
+            var escenario = new Escenario(rol: RolUsuario.Oficina);
+            RecepcionLeche? agregada = null;
+            escenario.Recepciones.Setup(r => r.AddAsync(It.IsAny<RecepcionLeche>()))
+                .Callback<RecepcionLeche>(r => agregada = r).Returns(Task.CompletedTask);
+
+            // Act
+            var result = await escenario.Servicio().RegistrarRecepcionAsync(escenario.ProveedorId, Dto());
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Null(result.OperarioNombre);
+            Assert.NotNull(agregada);
+            Assert.Equal(escenario.UsuarioId, agregada.RegistradoPorUsuarioId);
+            Assert.Null(agregada.OperarioId);
+            escenario.Operarios.Verify(o => o.GetActivoPorPinHashAsync(It.IsAny<string>()), Times.Never);
         }
 
         [Fact]

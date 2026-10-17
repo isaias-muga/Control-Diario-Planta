@@ -129,6 +129,7 @@ namespace DairyControl.Api.Tests
             acidez = 17,
             temperatura = 5,
             litros = 1000,
+            silo = 1,
             // Plant time, whatever the time zone of the machine that runs the test
             fechaHora = DairyControl.Application.HoraPlanta.Ahora(TimeProvider.System).AddMinutes(-5).ToString("yyyy-MM-ddTHH:mm:ss"),
             ticket = 6000 + Random.Shared.Next(1, 1000),

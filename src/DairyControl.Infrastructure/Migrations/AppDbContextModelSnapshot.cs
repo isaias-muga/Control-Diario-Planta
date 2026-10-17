@@ -30,6 +30,11 @@ namespace DairyControl.Infrastructure.Migrations
                     b.Property<DateTime>("ActualizadoEn")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("CantidadSilos")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(3);
+
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -43,7 +48,8 @@ namespace DairyControl.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("5b0c6f0e-3f6a-4f7e-9a53-0d1c2b7a4e11"),
-                            ActualizadoEn = new DateTime(2026, 10, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                            ActualizadoEn = new DateTime(2026, 10, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CantidadSilos = 3
                         });
                 });
 

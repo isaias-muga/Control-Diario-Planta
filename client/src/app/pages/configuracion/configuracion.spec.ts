@@ -11,6 +11,7 @@ const limites: LimitesCalidad = {
   acidezMaxima: 19,
   temperaturaMaxima: 20,
   aguaMaxima: 0,
+  cantidadSilos: 3,
   actualizadoEn: '2026-10-01T00:00:00Z',
   version: 'AAAAAAAAB9A=',
 };
@@ -54,6 +55,7 @@ describe('Configuracion', () => {
       acidezMaxima: 19,
       temperaturaMaxima: 20,
       aguaMaxima: 0,
+      cantidadSilos: 3,
     });
     expect(fixture.nativeElement.textContent).toContain('Última modificación:');
     expect(fixture.nativeElement.textContent).toContain(
@@ -88,6 +90,10 @@ describe('Configuracion', () => {
     ['temperaturaMaxima', 40.1],
     ['aguaMaxima', -0.1],
     ['aguaMaxima', 10.1],
+    ['cantidadSilos', 0],
+    ['cantidadSilos', 21],
+    ['cantidadSilos', -1],
+    ['cantidadSilos', 2.5],
   ] as const)('does not save when %s is %s', async (campo, valor) => {
     await setup();
     await cargarLimites();
@@ -155,23 +161,24 @@ describe('Configuracion', () => {
     });
   });
 
-  it('sends the three limits with PUT and shows a success snackbar', async () => {
+  it('sends the three limits and the number of silos with PUT and shows a success snackbar', async () => {
     await setup();
     await cargarLimites();
     const snackBar = TestBed.inject(MatSnackBar);
     const open = vi.spyOn(snackBar, 'open');
-    component.form.setValue({ acidezMaxima: 18, temperaturaMaxima: 8, aguaMaxima: 1.5 });
+    component.form.setValue({ acidezMaxima: 18, temperaturaMaxima: 8, aguaMaxima: 1.5, cantidadSilos: 4 });
 
     component.guardar();
 
     expect(component.saving()).toBe(true);
     const req = http.expectOne(esCalidad);
     expect(req.request.method).toBe('PUT');
-    expect(req.request.body).toEqual({ acidezMaxima: 18, temperaturaMaxima: 8, aguaMaxima: 1.5, version: 'AAAAAAAAB9A=' });
+    expect(req.request.body).toEqual({ acidezMaxima: 18, temperaturaMaxima: 8, aguaMaxima: 1.5, cantidadSilos: 4, version: 'AAAAAAAAB9A=' });
     req.flush({
       acidezMaxima: 18,
       temperaturaMaxima: 8,
       aguaMaxima: 1.5,
+      cantidadSilos: 4,
       actualizadoEn: '2026-10-15T12:00:00Z',
       version: 'AAAAAAAAB9E=',
     });
@@ -267,6 +274,70 @@ describe('Configuracion', () => {
       component.guardar();
 
       http.expectNone((r) => r.method === 'PUT');
+    });
+  });
+
+  describe('number of silos', () => {
+    const escribir = (id: string, texto: string): void => {
+      const campo = fixture.nativeElement.querySelector(`#${id}`) as HTMLInputElement;
+      campo.value = texto;
+      campo.dispatchEvent(new Event('input'));
+      campo.dispatchEvent(new Event('blur'));
+      fixture.detectChanges();
+    };
+
+    it('shows the number of silos as an integer field', async () => {
+      await setup();
+      await cargarLimites();
+
+      const campo = fixture.nativeElement.querySelector('#cantidadSilos') as HTMLInputElement;
+
+      expect(campo.value).toBe('3');
+      expect(campo.getAttribute('inputmode')).toBe('numeric');
+      expect(fixture.nativeElement.textContent).toContain('Cantidad de silos');
+    });
+
+    it('saves a new number of silos', async () => {
+      await setup();
+      await cargarLimites();
+      escribir('cantidadSilos', '4');
+
+      component.guardar();
+
+      const req = http.expectOne(esCalidad);
+      expect(req.request.body.cantidadSilos).toBe(4);
+      req.flush({ ...limites, cantidadSilos: 4 });
+      expect(component.form.controls.cantidadSilos.value).toBe(4);
+    });
+
+    it.each(['0', '21', '2,5'])('does not save "%s" silos and says why', async (texto) => {
+      await setup();
+      await cargarLimites();
+      escribir('cantidadSilos', texto);
+
+      component.guardar();
+
+      http.expectNone(esCalidad);
+      expect(component.form.controls.cantidadSilos.invalid).toBe(true);
+    });
+
+    it('shows the API message when it refuses the number (400 on cantidadSilos)', async () => {
+      await setup();
+      await cargarLimites();
+      component.form.controls.cantidadSilos.setValue(5);
+
+      component.guardar();
+      http.expectOne(esCalidad).flush({ error: 'La cantidad de silos debe estar entre 1 y 20.', field: 'cantidadSilos' }, { status: 400, statusText: 'Bad Request' });
+
+      expect(component.saveError()).toBe('La cantidad de silos debe estar entre 1 y 20.');
+    });
+
+    it('is read only for the office', async () => {
+      await setup('Oficina');
+      await cargarLimites();
+
+      expect(component.form.controls.cantidadSilos.disabled).toBe(true);
+      expect((fixture.nativeElement.querySelector('#cantidadSilos') as HTMLInputElement).disabled).toBe(true);
     });
   });
 });

@@ -169,7 +169,7 @@ namespace DairyControl.Infrastructure.Tests
             var actual = new UsuarioActualFijo(_adminId, RolUsuario.Admin);
             var pin = new VerificacionPinService(new UsuarioRepository(context), new OperarioRepository(context),
                 new PinHasherHmac(Options.Create(new PinSettings { Secret = new string('s', 32) })), actual, Reloj);
-            return new(new ProveedorRepository(context), new RecepcionRepository(context), new ProveedorQueries(context), actual, pin, Reloj);
+            return new(new ProveedorRepository(context), new RecepcionRepository(context), new ProveedorQueries(context), new ConfiguracionCalidadRepository(context), actual, pin, Reloj);
         }
 
         private static RegistrarRecepcionDto Dto(int? ticket) => new()
@@ -178,6 +178,7 @@ namespace DairyControl.Infrastructure.Tests
             Temperatura = 5m,
             Litros = 1000m,
             FechaHora = new DateTime(2026, 10, 20, 11, 0, 0),
+            Silo = 1,
             Ticket = ticket
         };
 

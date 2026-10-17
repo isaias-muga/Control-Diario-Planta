@@ -4,14 +4,14 @@ import localeEsAr from '@angular/common/locales/es-AR';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, TestRequest, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { CargaRapida } from './carga-rapida';
 import { cerrarSesionDePrueba, iniciarSesionDePrueba } from '../../testing/sesion';
 import { Rol } from '../../utils/jwt';
 
 registerLocaleData(localeEsAr);
 
-const LIMITES = { acidezMaxima: 19, temperaturaMaxima: 20, aguaMaxima: 0, actualizadoEn: '2026-10-15T00:00:00Z' };
+const LIMITES = { acidezMaxima: 19, temperaturaMaxima: 20, aguaMaxima: 0, cantidadSilos: 3, actualizadoEn: '2026-10-15T00:00:00Z' };
 const PROVEEDOR = { id: 'p1', nombre: 'Tambo Don Pedro' };
 
 /** What the API answers when it saved the recepción that was sent (the operario only when a PIN identified one). */
@@ -26,7 +26,7 @@ describe('CargaRapida', () => {
   let http: HttpTestingController;
 
   /** Opens the page as a user of that role and answers the three requests it makes when it starts. */
-  async function preparar(rol: Rol): Promise<void> {
+  async function preparar(rol: Rol, consulta = ''): Promise<void> {
     iniciarSesionDePrueba(rol);
     TestBed.configureTestingModule({
       providers: [
@@ -38,6 +38,9 @@ describe('CargaRapida', () => {
     });
     http = TestBed.inject(HttpTestingController);
     vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    if (consulta) {
+      await TestBed.inject(Router).navigateByUrl('/' + consulta);
+    }
     fixture = TestBed.createComponent(CargaRapida);
     component = fixture.componentInstance;
     await fixture.whenStable();
@@ -68,6 +71,7 @@ describe('CargaRapida', () => {
     component.form.patchValue({
       proveedorId: 'p1',
       ticket: 4981,
+      silo: 1,
       litros: 1000,
       acidez: 17,
       temperatura: 5,
@@ -149,7 +153,7 @@ describe('CargaRapida', () => {
     expect(fuera[0]).toContain('Fuera de rango (máx. 19)');
   });
 
-  it('shows "Litros a pagar" only when there is water, and a dash for empty optional values', () => {
+  it('shows "Litros a pagar" only when there is water, and a dash for the empty optional values', () => {
     cargar();
     component.continuar();
     fixture.detectChanges();
@@ -157,7 +161,7 @@ describe('CargaRapida', () => {
     expect(dato('Litros a pagar')).toBeUndefined();
     expect(dato('Grasa')).toBe('—');
     expect(dato('Agua')).toBe('—');
-    expect(dato('Silo')).toBe('—');
+    expect(dato('Silo')).toBe('1'); // required now: never a dash
   });
 
   it('highlights nothing when every reading is within the limits', () => {
@@ -499,6 +503,173 @@ describe('CargaRapida', () => {
       expect(el().querySelector('mat-select')).toBeNull();
       expect(el().querySelector('input[aria-busy="true"]')).toBeNull();
       expect(texto()).toContain('No tenés permiso para esta acción.');
+    });
+  });
+
+  describe('silo', () => {
+    const botonesSilo = (): HTMLButtonElement[] => Array.from(el().querySelectorAll('.silos button[role="radio"]'));
+
+    it('offers one large button per silo of the plant, 1..N, and no text field', () => {
+      expect(botonesSilo().map((b) => b.textContent?.trim())).toEqual(['1', '2', '3']);
+      expect(el().querySelector('#silo')).toBeNull();
+      expect(el().querySelector('.silos')?.getAttribute('role')).toBe('radiogroup');
+    });
+
+    it('chooses a silo with a tap and marks only that one', () => {
+      botonesSilo()[1].click();
+      fixture.detectChanges();
+
+      expect(component.form.controls.silo.value).toBe(2);
+      expect(botonesSilo().map((b) => b.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false']);
+    });
+
+    it('does not go to the confirmation without a silo and says so', () => {
+      cargar({ silo: null });
+
+      component.continuar();
+      fixture.detectChanges();
+
+      expect(component.paso()).toBe('carga');
+      expect(texto()).toContain('Elegí el silo.');
+    });
+
+    it('shows the silo chosen on the confirmation and sends it', () => {
+      cargar({ silo: 2 });
+      component.continuar();
+      fixture.detectChanges();
+      expect(dato('Silo')).toBe('2');
+
+      component.enviar();
+      const req = peticionPost();
+
+      expect(req.request.body.silo).toBe(2);
+      ok(req);
+    });
+
+    it('goes back to the first step with the API message when the server refuses the silo (400 on silo)', () => {
+      cargar({ silo: 3 });
+      component.continuar();
+
+      component.enviar();
+      peticionPost().flush({ error: 'El silo debe estar entre 1 y 2.', field: 'silo' }, { status: 400, statusText: 'Bad Request' });
+      fixture.detectChanges();
+
+      expect(component.paso()).toBe('carga');
+      expect(texto()).toContain('El silo debe estar entre 1 y 2.');
+      expect(component.form.controls.silo.value).toBe(3);
+    });
+  });
+
+  describe('while the configuration loads or fails', () => {
+    async function abrirSinConfiguracion(): Promise<void> {
+      http.verify();
+      TestBed.resetTestingModule();
+      iniciarSesionDePrueba('Admin');
+      TestBed.configureTestingModule({
+        providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: LOCALE_ID, useValue: 'es-AR' }],
+      });
+      http = TestBed.inject(HttpTestingController);
+      vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+      fixture = TestBed.createComponent(CargaRapida);
+      component = fixture.componentInstance;
+      await fixture.whenStable();
+      http.expectOne((r) => r.url.endsWith('/Proveedores/opciones')).flush([PROVEEDOR]);
+      http.expectOne((r) => r.url.endsWith('/Recepciones/siguiente-ticket')).flush({ ticket: 4981 });
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+
+    it('shows "Cargando silos…" and no buttons until the configuration arrives', async () => {
+      await abrirSinConfiguracion();
+
+      expect(texto()).toContain('Cargando silos…');
+      expect(el().querySelectorAll('.silos button')).toHaveLength(0);
+
+      http.expectOne((r) => r.url.endsWith('/Configuracion/calidad')).flush({ ...LIMITES, cantidadSilos: 4 });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(texto()).not.toContain('Cargando silos…');
+      expect(el().querySelectorAll('.silos button')).toHaveLength(4);
+    });
+
+    it('shows an error with a retry when the configuration cannot be loaded, and loads it again on retry', async () => {
+      await abrirSinConfiguracion();
+
+      http.expectOne((r) => r.url.endsWith('/Configuracion/calidad')).flush({}, { status: 500, statusText: 'Server Error' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(texto()).toContain('No se pudieron cargar los silos.');
+      (Array.from(el().querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Reintentar') as HTMLButtonElement).click();
+      http.expectOne((r) => r.url.endsWith('/Configuracion/calidad')).flush(LIMITES);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(el().querySelectorAll('.silos button')).toHaveLength(3);
+    });
+  });
+
+  describe('coming from a proveedor', () => {
+    it('has that proveedor chosen (?proveedor=<id>)', async () => {
+      http.verify();
+      TestBed.resetTestingModule();
+      await preparar('Admin', '?proveedor=p1');
+
+      expect(component.form.controls.proveedorId.value).toBe('p1');
+    });
+
+    it('ignores an id that is not in the list', async () => {
+      http.verify();
+      TestBed.resetTestingModule();
+      await preparar('Admin', '?proveedor=otro');
+
+      expect(component.form.controls.proveedorId.value).toBe('');
+    });
+
+    it('starts the next recepción with the same proveedor chosen, and nothing else', async () => {
+      http.verify();
+      TestBed.resetTestingModule();
+      await preparar('Admin', '?proveedor=p1');
+      cargar({ litros: 1000 });
+      component.continuar();
+      component.enviar();
+      ok(peticionPost());
+
+      component.nuevaRecepcion();
+      http.expectOne((r) => r.url.endsWith('/Recepciones/siguiente-ticket')).flush({ ticket: 4982 });
+
+      expect(component.form.getRawValue()).toMatchObject({ proveedorId: 'p1', litros: null, silo: null });
+    });
+  });
+
+  describe('for the office (role Oficina)', () => {
+    beforeEach(async () => {
+      http.verify();
+      TestBed.resetTestingModule();
+      await preparar('Oficina');
+    });
+
+    it('asks for no PIN', () => {
+      cargar();
+      component.continuar();
+      fixture.detectChanges();
+
+      expect(el().querySelector('#pin')).toBeNull();
+    });
+
+    it('registers with her own user (no PIN is sent) and offers the way back to Recepciones', () => {
+      cargar();
+      component.continuar();
+
+      component.enviar();
+      const req = peticionPost();
+      expect(req.request.body.pin).toBeNull();
+      ok(req);
+      fixture.detectChanges();
+
+      expect(component.paso()).toBe('listo');
+      expect(Array.from(el().querySelectorAll('a')).map((a) => a.getAttribute('href'))).toContain('/recepciones');
     });
   });
 });

@@ -7,7 +7,7 @@ import { AuthService } from './services/auth';
 // users; the reception phone only has its home and the quick flow.
 const oficina = roleGuard('Admin', 'Oficina');
 const soloAdmin = roleGuard('Admin');
-const carga = roleGuard('Admin', 'Recepcion');
+const carga = roleGuard('Admin', 'Oficina', 'Recepcion');
 const recepcion = roleGuard('Recepcion');
 
 export const routes: Routes = [

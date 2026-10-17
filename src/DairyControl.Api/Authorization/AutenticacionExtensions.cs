@@ -75,7 +75,7 @@ namespace DairyControl.Api.Authorization
                 .SetFallbackPolicy(Politica(RolUsuario.Admin, RolUsuario.Oficina))
                 .AddPolicy(Politicas.Lectura, Politica(RolUsuario.Admin, RolUsuario.Oficina))
                 .AddPolicy(Politicas.LecturaCarga, Politica(RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion))
-                .AddPolicy(Politicas.Registro, Politica(RolUsuario.Admin, RolUsuario.Recepcion))
+                .AddPolicy(Politicas.Registro, Politica(RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion))
                 .AddPolicy(Politicas.Administracion, Politica(RolUsuario.Admin))
                 .AddPolicy(Politicas.Autenticado, Politica(RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion))
                 .AddPolicy(Politicas.CambioPassword, new AuthorizationPolicyBuilder()

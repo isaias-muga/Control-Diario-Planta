@@ -29,7 +29,7 @@ namespace DairyControl.Api.Tests
             ("GET", "/api/Proveedores/opciones", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
             ("GET", $"/api/Proveedores/{UnId}", [RolUsuario.Admin, RolUsuario.Oficina]),
             ("POST", "/api/Proveedores", [RolUsuario.Admin]),
-            ("POST", $"/api/Proveedores/{UnId}/recepciones", [RolUsuario.Admin, RolUsuario.Recepcion]),
+            ("POST", $"/api/Proveedores/{UnId}/recepciones", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
             ("GET", "/api/Recepciones?desde=2026-10-01&hasta=2026-10-02", [RolUsuario.Admin, RolUsuario.Oficina]),
             ("GET", "/api/Recepciones/resumen?desde=2026-10-01&hasta=2026-10-02", [RolUsuario.Admin, RolUsuario.Oficina]),
             ("GET", "/api/Recepciones/siguiente-ticket", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),

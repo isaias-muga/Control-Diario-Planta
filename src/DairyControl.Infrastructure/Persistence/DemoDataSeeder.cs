@@ -70,7 +70,7 @@ namespace DairyControl.Infrastructure.Persistence
                 }
                 else
                 {
-                    configuracion.CambiarLimites(LimitesCalidad.Predeterminados, _reloj.GetUtcNow().UtcDateTime);
+                    configuracion.Actualizar(LimitesCalidad.Predeterminados, ConfiguracionCalidad.SilosPredeterminados, _reloj.GetUtcNow().UtcDateTime);
                 }
 
                 await AddDemoDataAsync();

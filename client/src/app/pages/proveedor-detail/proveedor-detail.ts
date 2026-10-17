@@ -1,4 +1,4 @@
-import { Component, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { Component, effect, inject, input, signal, untracked } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
@@ -6,9 +6,7 @@ import { AuthService } from '../../services/auth';
 import { ProveedoresService } from '../../services/proveedores';
 import { Proveedor } from '../../models/proveedor';
 import { RecepcionesPanel } from '../../components/recepciones-panel/recepciones-panel';
-import { RegistrarRecepcionDialog } from '../../components/registrar-recepcion-dialog/registrar-recepcion-dialog';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialog } from '@angular/material/dialog';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
 @Component({
@@ -20,10 +18,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 export class ProveedorDetail {
   protected auth = inject(AuthService);
   private proveedoresService = inject(ProveedoresService);
-  private dialog = inject(MatDialog);
   private request?: Subscription;
-
-  private panel = viewChild(RecepcionesPanel);
 
   id = input.required<string>();
 
@@ -36,14 +31,6 @@ export class ProveedorDetail {
     effect(() => {
       this.id(); // re-run whenever the route id changes
       untracked(() => this.load());
-    });
-  }
-
-  protected abrirRegistro(proveedorId: string): void {
-    RegistrarRecepcionDialog.abrir(this.dialog, { proveedorId }).subscribe((registro) => {
-      if (registro) {
-        this.panel()?.recargar();
-      }
     });
   }
 

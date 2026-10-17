@@ -29,7 +29,7 @@ Captured at about 1366px wide, with the demo data. The UI is in Spanish, like th
 
 ![Recepciones](docs/screenshots/recepciones.png)
 
-**Registering a delivery**: the form previews the real liters (water deducted) and which limits the reading exceeds.
+**Registering a delivery**: three steps (load, confirm, done); the silo is chosen with large buttons, and the confirmation highlights which limits the reading exceeds.
 
 ![Registrar recepción](docs/screenshots/registrar-recepcion.png)
 
@@ -47,7 +47,7 @@ Captured at about 1366px wide, with the demo data. The UI is in Spanish, like th
 
 A _proveedor_ is a milk supplier; a _recepción_ is one delivery received at the plant.
 
-- **Daily reception log.** Each delivery records liters, temperature, acidity, optional fat, silo, notes, an optional plant **ticket number** and an optional **water percentage**.
+- **Daily reception log.** Each delivery records liters, temperature, acidity, optional fat, a required silo (the number of silos is a setting), notes, an optional plant **ticket number** and an optional **water percentage**.
 - **Real liters.** Liters to pay = liters × (1 − water % / 100). The same figure is used in the form preview, the list and the totals.
 - **Editable quality limits.** Maximum acidity, temperature and water are set in the app and apply immediately. A value over a limit is **accepted and flagged** (with the reason), never rejected. Defaults: 19 °D, 20 °C, 0 % water.
 - **Plausible-range validation.** Typing errors are **rejected** with a clear message (for example acidity outside 10–30 °D, or more than 30,000 liters in one delivery). Plausible values are different from quality limits: a warm delivery is real and must be recorded.
@@ -55,8 +55,8 @@ A _proveedor_ is a milk supplier; a _recepción_ is one delivery received at the
 - **Dashboard by period.** Day, week, month or year, or any date range, for all suppliers or one: liters against the previous period, averages, out-of-range count, liters per day, supplier ranking.
 - **Recepciones list.** Daily subtotals, filters by period, supplier, ticket and "out of range only".
 - **es-AR numbers and plant time.** `1.234,5` is read as 1234.5 (ambiguous input is rejected with a message). Dates are shown and validated in Buenos Aires time.
-- **Quick reception flow.** A phone-first screen (load, confirm, done) with big inputs, a full-screen confirmation that highlights values over the limits, and protection against double taps and lost connections.
-- **Users and roles.** Admin, Oficina (read only) and Recepcion (the reception phone: one button, and an operator PIN to say who loads each delivery). Permissions are enforced by the API; every delivery and supplier records who created it. Sessions end the moment a user is deactivated or changes the password.
+- **One registration flow.** Load, confirm, done: big inputs, silo buttons, a confirmation that highlights values over the limits, and protection against double taps and lost connections. It is a centered card on a PC and a full screen on a phone; the office clerk and the reception phone use the same flow.
+- **Users and roles.** Admin, Oficina (reads everything and registers recepciones) and Recepcion (the reception phone: one button, and an operator PIN to say who loads each delivery). Permissions are enforced by the API; every delivery and supplier records who created it. Sessions end the moment a user is deactivated or changes the password.
 - Deliveries are records of what happened: they can be registered, not edited or deleted.
 
 ## Architecture

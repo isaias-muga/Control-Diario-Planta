@@ -13,13 +13,13 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { map, startWith } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { crearFormularioRecepcion } from '../../components/recepcion-form/recepcion-form-group';
+import { crearFormularioRecepcion } from './formulario-recepcion';
 import { NumeroInput } from '../../components/numero-input/numero-input';
 import { LimitesCalidad } from '../../models/configuracion';
 import { OBSERVACIONES_MAX_LENGTH, PIN_LENGTH } from '../../models/limits';
@@ -72,6 +72,7 @@ interface Fallo {
 })
 export class CargaRapida {
   protected auth = inject(AuthService);
+  private route = inject(ActivatedRoute);
   private proveedoresService = inject(ProveedoresService);
   private recepcionesService = inject(RecepcionesService);
   private configuracionService = inject(ConfiguracionService);
@@ -99,6 +100,11 @@ export class CargaRapida {
   /** The options have arrived: an empty select ignores the tap in silence, so it is not shown before this. */
   proveedoresCargados = signal(false);
   private limites = signal<LimitesCalidad | null>(null);
+  /** The configuration could not be loaded: without it there are no silos to choose from. */
+  limitesError = signal(false);
+
+  /** 1..N, N from the configuration; empty until it arrives (the buttons are not shown before). */
+  protected silos = computed(() => Array.from({ length: this.limites()?.cantidadSilos ?? 0 }, (_, i) => i + 1));
   /** True once a send ended without an answer (network, 5xx): the next send is a retry that may duplicate it. */
   private reintento = false;
 
@@ -147,19 +153,39 @@ export class CargaRapida {
       next: (lista) => {
         this.proveedores.set([...lista].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')));
         this.proveedoresCargados.set(true);
+        this.preseleccionarProveedor();
       },
       error: (err: HttpErrorResponse) =>
         this.proveedoresError.set(getApiErrorMessage(err, 'No se pudieron cargar los proveedores.')),
     });
-    this.configuracionService.getCalidad().subscribe({
-      next: (limites) => this.limites.set(limites),
-      // Without the limits the confirmation just does not highlight anything.
-      error: () => this.limites.set(null),
-    });
+    this.cargarConfiguracion();
     this.cargarSiguienteTicket();
     // The help line says "ahora": keep it from going stale while the operator types
     const reloj = setInterval(() => this.ahora.set(ahoraEnPlanta()), 30_000);
     this.destroyRef.onDestroy(() => clearInterval(reloj));
+  }
+
+  /** The plant configuration: the quality limits (highlighted on the confirmation) and the number of silos (the buttons). */
+  protected cargarConfiguracion(): void {
+    this.limitesError.set(false);
+    this.configuracionService.getCalidad().subscribe({
+      next: (limites) => this.limites.set(limites),
+      error: () => this.limitesError.set(true),
+    });
+  }
+
+  /** Coming from a proveedor's page (?proveedor=<id>): that proveedor is already chosen. */
+  private preseleccionarProveedor(): void {
+    const id = this.route.snapshot.queryParamMap.get('proveedor');
+    if (id && this.proveedores().some((p) => p.id === id) && !this.form.controls.proveedorId.value) {
+      this.form.controls.proveedorId.setValue(id);
+    }
+  }
+
+  /** The silo buttons: choosing one sets the (required) silo of the form. */
+  protected elegirSilo(silo: number): void {
+    this.form.controls.silo.setValue(silo);
+    this.form.controls.silo.markAsTouched();
   }
 
   protected fueraDeRango(medicion: Medicion): boolean {
@@ -209,6 +235,7 @@ export class CargaRapida {
     this.pin.reset();
     this.cargarSiguienteTicket();
     this.ahora.set(ahoraEnPlanta());
+    this.preseleccionarProveedor();
     this.irA('carga');
   }
 
@@ -230,7 +257,7 @@ export class CargaRapida {
       grasa: v.grasa,
       acidez: v.acidez!,
       temperatura: v.temperatura!,
-      silo: v.silo,
+      silo: v.silo!,
       aguaPorcentaje: v.aguaPorcentaje,
       ticket: v.ticket,
       observaciones: v.observaciones?.trim() || null,

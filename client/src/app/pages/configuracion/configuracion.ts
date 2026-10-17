@@ -13,6 +13,7 @@ import {
   ACIDEZ_LIMITE_MIN,
   AGUA_LIMITE_MAX,
   AGUA_LIMITE_MIN,
+  SILO_MAX,
   TEMPERATURA_LIMITE_MAX,
   TEMPERATURA_LIMITE_MIN,
 } from '../../models/limits';
@@ -51,6 +52,8 @@ export class Configuracion {
   readonly temperaturaMax = TEMPERATURA_LIMITE_MAX;
   readonly aguaMin = AGUA_LIMITE_MIN;
   readonly aguaMax = AGUA_LIMITE_MAX;
+  readonly silosMin = 1;
+  readonly silosMax = SILO_MAX;
 
   form = this.fb.group({
     acidezMaxima: [
@@ -68,6 +71,10 @@ export class Configuracion {
     aguaMaxima: [
       null as number | null,
       [Validators.required, Validators.min(AGUA_LIMITE_MIN), Validators.max(AGUA_LIMITE_MAX)],
+    ],
+    cantidadSilos: [
+      null as number | null,
+      [Validators.required, Validators.min(1), Validators.max(SILO_MAX), Validators.pattern(/^\d+$/)],
     ],
   });
 
@@ -137,6 +144,7 @@ export class Configuracion {
         acidezMaxima: v.acidezMaxima!,
         temperaturaMaxima: v.temperaturaMaxima!,
         aguaMaxima: v.aguaMaxima!,
+        cantidadSilos: v.cantidadSilos!,
         version: this.version!,
       })
       .subscribe({
@@ -157,6 +165,7 @@ export class Configuracion {
       acidezMaxima: limites.acidezMaxima,
       temperaturaMaxima: limites.temperaturaMaxima,
       aguaMaxima: limites.aguaMaxima,
+      cantidadSilos: limites.cantidadSilos,
     });
     this.actualizadoEn.set(limites.actualizadoEn);
     this.version = limites.version;
