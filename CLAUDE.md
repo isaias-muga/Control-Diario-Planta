@@ -86,7 +86,7 @@ Milk reception and quality-control system for a dairy plant. Backend: .NET 10, A
 
 - Standalone components only (no NgModules). Use signals for component state and the built-in control flow (`@if`, `@for`, `@empty`).
 - Folders under `client/src/app`:
-  - `pages/`: routed components (`login`, `resumen`, `recepciones`, `proveedores-list`, `proveedor-detail`, `configuracion`)
+  - `pages/`: routed components (`login`, `resumen`, `recepciones`, `proveedores-list`, `proveedor-detail`, `configuracion`, `carga-rapida`)
   - `components/`: reusable components and dialogs (`recepcion-form`, `registrar-recepcion-dialog`, `confirmar-descarte-dialog`, `crear-proveedor-dialog`, `numero-input` (the `appNumero` directive), `observacion-celda`, `observaciones-dialog`, `recepciones-filtros`, `recepciones-list`, `recepciones-panel`)
   - `services/`: the only place that uses `HttpClient` (`ProveedoresService`, `RecepcionesService`, `ConfiguracionService`, `AuthService`)
   - `models/`: TypeScript interfaces mirroring the API DTOs, plus `limits.ts`
@@ -104,6 +104,8 @@ Milk reception and quality-control system for a dairy plant. Backend: .NET 10, A
 - User-facing text is in Spanish.
 
 ### UI conventions
+
+- Quick reception flow (`/recepciones/carga`, page `carga-rapida`): phone-first, three steps (load, confirm, done) on the same `POST` and the same form definition as the dialog (`crearFormularioRecepcion`); the ticket is required there. Touch targets are at least 48 px. Fecha/hora is fixed when entering the confirmation and sent unchanged, also on a retry. After a network error, a 409 on the retry means "probably already saved" and is never shown as a duplicate ticket. The done step shows the values as entered.
 
 - Styling: each component's styles live in its own CSS file; global styles and theme in `styles.scss`.
 - Form fields: mark optional fields in the label, e.g. "Silo (opcional)"; required fields keep the asterisk. Never use `mat-hint` for "opcional"; hints are only for short help text. Leave room for hints and errors so they never overlap the next field's label (form fields use dynamic subscript sizing from `app.config.ts`, and outline fields have a bottom margin in `styles.scss`).

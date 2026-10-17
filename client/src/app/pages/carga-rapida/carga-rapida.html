@@ -1,0 +1,222 @@
+@switch (paso()) {
+  @case ('carga') {
+    <form class="paso" [formGroup]="form" (ngSubmit)="continuar()" novalidate>
+      <h2 #titulo tabindex="-1">Carga rápida</h2>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Proveedor</mat-label>
+        <mat-select id="proveedorId" formControlName="proveedorId">
+          @for (p of proveedores(); track p.id) {
+            <mat-option [value]="p.id">{{ p.nombre }}</mat-option>
+          }
+        </mat-select>
+        @if (invalid('proveedorId')) {
+          <mat-error>Elegí un proveedor.</mat-error>
+        }
+      </mat-form-field>
+      @if (proveedoresError()) {
+        <p class="error" role="alert">{{ proveedoresError() }}</p>
+      }
+
+      <mat-form-field appearance="outline">
+        <mat-label>Ticket</mat-label>
+        <input matInput appNumero="entero" id="ticket" formControlName="ticket" (input)="errorCarga.set(null)" />
+        @if (invalid('ticket')) {
+          <mat-error>{{ errorNumero(form.controls.ticket, 'Requerido. Número entero entre 1 y 2.147.483.647.') }}</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Litros</mat-label>
+        <input matInput appNumero id="litros" formControlName="litros" />
+        @if (invalid('litros')) {
+          <mat-error>{{ errorNumero(form.controls.litros, 'Requerido, entre 0,001 y 30.000.') }}</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Acidez (°D)</mat-label>
+        <input matInput appNumero id="acidez" formControlName="acidez" />
+        @if (invalid('acidez')) {
+          <mat-error>{{ errorNumero(form.controls.acidez, 'Requerido, entre 10 y 30 °D.') }}</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Temperatura (°C)</mat-label>
+        <input matInput appNumero id="temperatura" formControlName="temperatura" />
+        @if (invalid('temperatura')) {
+          <mat-error>{{ errorNumero(form.controls.temperatura, 'Requerido, entre 0 y 45 °C.') }}</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>% agua (opcional)</mat-label>
+        <input matInput appNumero id="aguaPorcentaje" formControlName="aguaPorcentaje" />
+        @if (invalid('aguaPorcentaje')) {
+          <mat-error>{{ errorNumero(form.controls.aguaPorcentaje, 'Entre 0 y 100.') }}</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Grasa (%) (opcional)</mat-label>
+        <input matInput appNumero id="grasa" formControlName="grasa" />
+        @if (invalid('grasa')) {
+          <mat-error>{{ errorNumero(form.controls.grasa, 'Entre 1 y 10 %.') }}</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Silo (opcional)</mat-label>
+        <input matInput appNumero="entero" id="silo" formControlName="silo" />
+        @if (invalid('silo')) {
+          <mat-error>{{ errorNumero(form.controls.silo, 'Número entero entre 1 y 20.') }}</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Observaciones (opcional)</mat-label>
+        <textarea matInput id="observaciones" rows="3" formControlName="observaciones" [maxlength]="observacionesMaxLength"></textarea>
+      </mat-form-field>
+
+      @if (errorCarga()) {
+        <p class="error" role="alert">{{ errorCarga() }}</p>
+      }
+
+      <div class="acciones">
+        <button mat-flat-button type="submit" class="boton">Continuar</button>
+        <a mat-button class="boton" routerLink="/recepciones">Cancelar</a>
+      </div>
+    </form>
+  }
+
+  @case ('confirmar') {
+    <section class="paso confirmar" aria-labelledby="titulo-confirmar">
+      <h2 #titulo id="titulo-confirmar" tabindex="-1">¿Son correctos estos datos?</h2>
+
+      <dl class="datos">
+        <div class="dato">
+          <dt>Proveedor</dt>
+          <dd>{{ proveedorNombre() }}</dd>
+        </div>
+        <div class="dato">
+          <dt>Ticket</dt>
+          <dd>{{ form.controls.ticket.value }}</dd>
+        </div>
+        <div class="dato">
+          <dt>Fecha y hora</dt>
+          <dd>{{ fechaHoraTexto() }}</dd>
+        </div>
+        <div class="dato destacado">
+          <dt>Litros</dt>
+          <dd>{{ form.controls.litros.value | number: '1.0-3' }}</dd>
+        </div>
+        @if (form.controls.aguaPorcentaje.value != null) {
+          <div class="dato">
+            <dt>Litros reales (sin agua)</dt>
+            <dd>{{ litrosRealesPrevios() | number: '1.0-3' }}</dd>
+          </div>
+        }
+        <div class="dato" [class.fuera]="fueraDeRango('acidez')">
+          <dt>Acidez</dt>
+          <dd>
+            {{ form.controls.acidez.value | number: '1.0-2' }} °D
+            @if (fueraDeRango('acidez')) {
+              <span class="limite">Fuera del límite (máx. {{ limite('acidez') | number: '1.0-2' }} °D)</span>
+            }
+          </dd>
+        </div>
+        <div class="dato" [class.fuera]="fueraDeRango('temperatura')">
+          <dt>Temperatura</dt>
+          <dd>
+            {{ form.controls.temperatura.value | number: '1.0-2' }} °C
+            @if (fueraDeRango('temperatura')) {
+              <span class="limite">Fuera del límite (máx. {{ limite('temperatura') | number: '1.0-2' }} °C)</span>
+            }
+          </dd>
+        </div>
+        @if (form.controls.aguaPorcentaje.value != null) {
+          <div class="dato" [class.fuera]="fueraDeRango('agua')">
+            <dt>Agua</dt>
+            <dd>
+              {{ form.controls.aguaPorcentaje.value | number: '1.0-2' }} %
+              @if (fueraDeRango('agua')) {
+                <span class="limite">Fuera del límite (máx. {{ limite('agua') | number: '1.0-2' }} %)</span>
+              }
+            </dd>
+          </div>
+        }
+        @if (form.controls.grasa.value != null) {
+          <div class="dato">
+            <dt>Grasa</dt>
+            <dd>{{ form.controls.grasa.value | number: '1.0-2' }} %</dd>
+          </div>
+        }
+        @if (form.controls.silo.value != null) {
+          <div class="dato">
+            <dt>Silo</dt>
+            <dd>{{ form.controls.silo.value }}</dd>
+          </div>
+        }
+        @if (form.controls.observaciones.value?.trim()) {
+          <div class="dato">
+            <dt>Observaciones</dt>
+            <dd class="observaciones">{{ form.controls.observaciones.value?.trim() }}</dd>
+          </div>
+        }
+      </dl>
+
+      @if (fallo(); as f) {
+        <div class="aviso-fallo" role="alert">
+          <strong>{{ f.puedeReintentar ? 'No se guardó' : 'Revisá antes de cargarla de nuevo' }}</strong>
+          <p>{{ f.mensaje }}</p>
+        </div>
+      }
+
+      <div class="acciones">
+        @if (!fallo() || fallo()!.puedeReintentar) {
+          <button mat-flat-button type="button" class="boton" [disabled]="enviando()" (click)="enviar()">
+            {{ enviando() ? 'Guardando...' : fallo() ? 'Reintentar' : 'Confirmar' }}
+          </button>
+        } @else {
+          <a mat-flat-button class="boton" routerLink="/recepciones">Ir a Recepciones</a>
+        }
+        <button mat-stroked-button type="button" class="boton" [disabled]="enviando()" (click)="corregir()">
+          Corregir
+        </button>
+      </div>
+    </section>
+  }
+
+  @case ('listo') {
+    <section class="paso listo" aria-labelledby="titulo-listo">
+      <svg class="check" viewBox="0 0 24 24" width="96" height="96" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="11" fill="currentColor" />
+        <path d="M6.5 12.5l3.7 3.7 7.3-7.7" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+      <h2 #titulo id="titulo-listo" tabindex="-1">Recepción guardada</h2>
+
+      @if (cargada(); as c) {
+        <dl class="datos">
+          <div class="dato">
+            <dt>Ticket</dt>
+            <dd>{{ c.ticket }}</dd>
+          </div>
+          <div class="dato">
+            <dt>Proveedor</dt>
+            <dd>{{ c.proveedor }}</dd>
+          </div>
+          <div class="dato destacado">
+            <dt>Litros</dt>
+            <dd>{{ c.litros | number: '1.0-3' }}</dd>
+          </div>
+        </dl>
+      }
+
+      <div class="acciones">
+        <button mat-flat-button type="button" class="boton" (click)="nuevaRecepcion()">Nueva recepción</button>
+        <a mat-button class="boton" routerLink="/recepciones">Ir a Recepciones</a>
+      </div>
+    </section>
+  }
+}

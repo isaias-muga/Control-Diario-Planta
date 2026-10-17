@@ -55,6 +55,7 @@ A _proveedor_ is a milk supplier; a _recepción_ is one delivery received at the
 - **Dashboard by period.** Day, week, month or year, or any date range, for all suppliers or one: liters against the previous period, averages, out-of-range count, liters per day, supplier ranking.
 - **Recepciones list.** Daily subtotals, filters by period, supplier, ticket and "out of range only".
 - **es-AR numbers and plant time.** `1.234,5` is read as 1234.5 (ambiguous input is rejected with a message). Dates are shown and validated in Buenos Aires time.
+- **Quick reception flow.** A phone-first screen (load, confirm, done) with big inputs, a full-screen confirmation that highlights values over the limits, and protection against double taps and lost connections.
 - Deliveries are records of what happened: they can be registered, not edited or deleted.
 
 ## Architecture

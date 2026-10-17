@@ -4,7 +4,10 @@
     <p class="subtitulo">{{ subtitulo() }}</p>
   </div>
 
-  <button mat-flat-button type="button" (click)="abrirRegistro()">+ Registrar recepción</button>
+  <div class="acciones">
+    <a mat-stroked-button routerLink="/recepciones/carga">Carga rápida</a>
+    <button mat-flat-button type="button" (click)="abrirRegistro()">+ Registrar recepción</button>
+  </div>
 </header>
 
 <app-recepciones-panel atajoInicial="hoy" (filtrosChange)="alCambiarFiltros($event)" />

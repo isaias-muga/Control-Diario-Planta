@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal, viewChild } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
+import { RouterLink } from '@angular/router';
 import { Proveedor } from '../../models/proveedor';
 import { FiltroRecepciones } from '../../models/recepcion-listado';
 import { ProveedoresService } from '../../services/proveedores';
@@ -10,7 +11,7 @@ import { formatearFecha } from '../../utils/periodos';
 
 @Component({
   selector: 'app-recepciones',
-  imports: [MatButtonModule, RecepcionesPanel],
+  imports: [MatButtonModule, RouterLink, RecepcionesPanel],
   templateUrl: './recepciones.html',
   styleUrl: './recepciones.css',
 })
