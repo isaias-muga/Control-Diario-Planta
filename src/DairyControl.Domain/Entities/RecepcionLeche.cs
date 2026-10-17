@@ -18,18 +18,29 @@ namespace DairyControl.Domain.Entities
         public string? Observaciones { get; private set; }
         public int? Ticket { get; private set; }
 
+        // Audit: the server stamps who registered it, from the token and the PIN, never from the request. Null for rows that
+        // existed before users did. RegistradoEn is a UTC timestamp; FechaHora stays in plant time.
+        public Guid? RegistradoPorUsuarioId { get; private set; }
+        public Guid? OperarioId { get; private set; }
+        public DateTime? RegistradoEn { get; private set; }
+
         // Liters to pay: the added water is deducted (water null = 0). The formula is defined once (LitrosAPagarRegla);
         // the queries use the same expression in SQL.
         public decimal LitrosAPagar => Math.Round(LitrosAPagarRegla.De(this), ParametrosCalidad.ScaleLitros);
 
         private RecepcionLeche() { }
 
-        public static RecepcionLeche Registrar(Guid proveedorId, ParametrosCalidad parametros, DateTime fechaHora, DateTime ahoraPlanta, int? silo, string? observaciones, int? ticket = null)
+        public static RecepcionLeche Registrar(Guid proveedorId, ParametrosCalidad parametros, DateTime fechaHora, DateTime ahoraPlanta, int? silo, string? observaciones,
+            Guid registradoPorUsuarioId, Guid? operarioId, DateTime registradoEnUtc, int? ticket = null)
         {
             ArgumentNullException.ThrowIfNull(parametros);
             if (proveedorId == Guid.Empty)
             {
                 throw new ReglaDeNegocioException("El proveedor es obligatorio.", nameof(proveedorId));
+            }
+            if (registradoPorUsuarioId == Guid.Empty)
+            {
+                throw new ReglaDeNegocioException("El usuario que registra la recepción es obligatorio.", nameof(registradoPorUsuarioId));
             }
             if (fechaHora == default)
             {
@@ -68,7 +79,10 @@ namespace DairyControl.Domain.Entities
                 Silo = silo,
                 Observaciones = observacionesTrim,
                 Ticket = ticket,
-                Parametros = parametros
+                Parametros = parametros,
+                RegistradoPorUsuarioId = registradoPorUsuarioId,
+                OperarioId = operarioId,
+                RegistradoEn = registradoEnUtc
             };
         }
 
