@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { crearProveedor, loginYEsperarResumen } from '../helpers';
+import { crearProveedor, irAConfiguracion, loginYEsperarResumen } from '../helpers';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
@@ -27,12 +27,13 @@ test('movil: the three tabs fit the screen and the gear opens Configuración', a
   const tabs = page.getByRole('navigation', { name: 'Secciones' });
   expect(await tabs.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
 
-  const engranaje = page.getByRole('link', { name: 'Configuración', exact: true });
+  const engranaje = page.getByRole('button', { name: 'Ajustes' });
   await expect(engranaje).toBeVisible();
-  await engranaje.click();
+  const caja = await engranaje.boundingBox();
+  expect(caja!.x + caja!.width).toBeLessThanOrEqual(ventana);
+  await irAConfiguracion(page);
 
   await expect(page.getByRole('heading', { name: 'Configuración', exact: true })).toBeVisible();
-  await expect(engranaje).toHaveAttribute('aria-current', 'page');
 });
 
 test('movil: the page never scrolls horizontally on Resumen, Recepciones, a proveedor and Configuración', async ({ page }) => {
@@ -46,7 +47,7 @@ test('movil: the page never scrolls horizontally on Resumen, Recepciones, a prov
   await expect(page.getByRole('heading', { name: nombre })).toBeVisible();
   await sinScrollHorizontal(page);
 
-  await page.getByRole('link', { name: 'Configuración', exact: true }).click();
+  await irAConfiguracion(page);
   await expect(page.getByRole('heading', { name: 'Configuración', exact: true })).toBeVisible();
   await sinScrollHorizontal(page);
 });

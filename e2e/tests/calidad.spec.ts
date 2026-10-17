@@ -3,6 +3,7 @@ import {
   cambiarAcidezMaximaPorApi,
   crearProveedor,
   guardarLimites,
+  irAConfiguracion,
   loginYEsperarResumen,
   registrarRecepcion,
   rellenar,
@@ -49,7 +50,7 @@ for (const demoraMs of [0, 500]) {
     await expect(page.getByText('1 de 1 recepciones')).toBeVisible();
     expect(await fueraDeRangoEn(page, nombre)).toBe('1');
 
-    await page.getByRole('link', { name: 'Configuración' }).click();
+    await irAConfiguracion(page);
     await expect(page.getByLabel(/^Acidez máxima/)).toBeVisible();
 
     try {
@@ -65,7 +66,7 @@ for (const demoraMs of [0, 500]) {
 }
 
 test('calidad: a limit typed as "19,5" is saved as 19.5 and shown as 19,5 after reloading', async ({ page, request }) => {
-  await page.getByRole('link', { name: 'Configuración' }).click();
+  await irAConfiguracion(page);
   await expect(page.getByLabel(/^Acidez máxima/)).toBeVisible();
 
   try {
@@ -80,7 +81,7 @@ test('calidad: a limit typed as "19,5" is saved as 19.5 and shown as 19,5 after 
 });
 
 test('calidad: saving limits that another user changed meanwhile shows the conflict and keeps what was typed', async ({ page, request }) => {
-  await page.getByRole('link', { name: 'Configuración' }).click();
+  await irAConfiguracion(page);
   await expect(page.getByLabel(/^Acidez máxima/)).toHaveValue('19');
 
   try {
@@ -122,7 +123,7 @@ test('calidad: the API rejects a limits update without version (400) and with a 
 });
 
 test('calidad: a double click on Guardar saves once and shows no conflict', async ({ page, request }) => {
-  await page.getByRole('link', { name: 'Configuración' }).click();
+  await irAConfiguracion(page);
   await expect(page.getByLabel(/^Acidez máxima/)).toHaveValue('19');
   const guardados: string[] = [];
   page.on('request', (r) => {
@@ -144,7 +145,7 @@ test('calidad: a double click on Guardar saves once and shows no conflict', asyn
 });
 
 test('calidad: a session rejected by the API while saving sends the user to the login page', async ({ page, request }) => {
-  await page.getByRole('link', { name: 'Configuración' }).click();
+  await irAConfiguracion(page);
   await expect(page.getByLabel(/^Acidez máxima/)).toHaveValue('19');
   await page.route('**/api/Configuracion/calidad', (route) =>
     route.request().method() === 'PUT' ? route.fulfill({ status: 401, body: '' }) : route.continue(),
