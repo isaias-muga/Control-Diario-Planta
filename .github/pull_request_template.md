@@ -10,7 +10,7 @@ Closes #
 
 ## Evidence
 
-<!-- Build and test results, and screenshots embedded from the pr-evidence branch (see CLAUDE.md, Git workflow). -->
+<!-- Build and test results, and screenshots embedded from the pr-evidence branch as `https://github.com/isaias-muga/Control-Diario-Planta/blob/<sha>/pr-<N>/<file>.png?raw=true` (see CLAUDE.md, Git workflow). -->
 
 ## Self-review
 

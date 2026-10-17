@@ -2,8 +2,7 @@
 
 Milk reception and quality control for a dairy plant, built from the plant's real spreadsheets.
 
-[![CI](https://github.com/isaias-muga/DairyControl/actions/workflows/ci.yml/badge.svg)](https://github.com/isaias-muga/DairyControl/actions/workflows/ci.yml)
-[![Deploy](https://github.com/isaias-muga/DairyControl/actions/workflows/deploy.yml/badge.svg)](https://github.com/isaias-muga/DairyControl/actions/workflows/deploy.yml)
+[![CI](https://github.com/isaias-muga/Control-Diario-Planta/actions/workflows/ci.yml/badge.svg)](https://github.com/isaias-muga/Control-Diario-Planta/actions/workflows/ci.yml)
 
 **.NET 10** · **Clean Architecture + DDD** · **Angular** · **SQL Server** · **Docker** · **Azure Container Apps**
 
@@ -167,7 +166,7 @@ Running without Docker (LocalDB, User Secrets, `ng serve`), the commands, the co
 
 ## Status
 
-This public version is frozen as a portfolio. Development continues privately for a production pilot at a dairy plant.
+This is the private production version for the plant pilot; the public portfolio lives in [isaias-muga/DairyControl](https://github.com/isaias-muga/DairyControl).
 
 ## Author
 
