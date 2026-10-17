@@ -42,5 +42,35 @@ namespace DairyControl.Infrastructure.Persistence.Repositories
         {
             await _context.SaveChangesAsync();
         }
+
+        private const int MaxReintentos = 10;
+
+        public async Task<Usuario?> ModificarAsync(Guid id, Func<Usuario, bool> cambio)
+        {
+            var usuario = await _context.Usuarios.FindAsync(id);
+            if (usuario is null)
+            {
+                return null;
+            }
+            for (var intento = 0; intento < MaxReintentos; intento++)
+            {
+                // Always start from what the database has now, not from what this request read earlier
+                await _context.Entry(usuario).ReloadAsync();
+                if (!cambio(usuario))
+                {
+                    return usuario;
+                }
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    return usuario;
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    // Someone saved first: read again and apply the change on top of it
+                }
+            }
+            throw new DemasiadosIntentosException("Demasiados intentos al mismo tiempo. Probá de nuevo en unos segundos.");
+        }
     }
 }

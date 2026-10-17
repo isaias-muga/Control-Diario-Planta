@@ -22,6 +22,7 @@ namespace DairyControl.Infrastructure.Tests
             _connection.Open();
             using var context = NuevoContexto();
             context.Database.EnsureCreated();
+            UsuariosDePrueba.InstalarVersionDeFila(context);
             _adminId = UsuariosDePrueba.CrearAdmin(context);
         }
 

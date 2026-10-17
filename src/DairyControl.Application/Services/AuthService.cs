@@ -1,4 +1,4 @@
-﻿using DairyControl.Application.DTOs;
+using DairyControl.Application.DTOs;
 using DairyControl.Application.Seguridad;
 using DairyControl.Application.Settings;
 using DairyControl.Domain.Entities;
@@ -53,24 +53,25 @@ namespace DairyControl.Application.Services
                 return null;
             }
 
+            // The attempt is counted BEFORE the password is checked, so a burst of parallel guesses cannot all see the same count
+            var permitido = false;
+            await _usuarios.ModificarAsync(usuario.Id, u =>
+            {
+                permitido = u.ReservarIntentoLogin(ahora);
+                return true;
+            });
+
             var correcta = _hasher.Verify(usuario.PasswordHash, dto.Password ?? "");
-            if (usuario.LoginBloqueado(ahora))
+            if (!permitido || !correcta)
             {
-                return null;
+                return null; // a wrong password, a locked user and an unknown user answer the same
             }
 
-            if (!correcta)
+            await _usuarios.ModificarAsync(usuario.Id, u =>
             {
-                usuario.RegistrarFalloLogin(ahora);
-                await _usuarios.UpdateAsync(usuario);
-                return null;
-            }
-
-            if (usuario.FallosLogin > 0 || usuario.LoginBloqueadoHastaUtc is not null)
-            {
-                usuario.ReiniciarFallosLogin();
-                await _usuarios.UpdateAsync(usuario);
-            }
+                u.ReiniciarFallosLogin();
+                return true;
+            });
             return Resultado(usuario, ahora);
         }
 
@@ -89,22 +90,27 @@ namespace DairyControl.Application.Services
             {
                 return null;
             }
-            var ahora = _reloj.GetUtcNow().UtcDateTime;
-            if (usuario.LoginBloqueado(ahora))
-            {
-                throw new DemasiadosIntentosException("Demasiados intentos. Probá de nuevo en unos minutos.");
-            }
-
-            if (!_hasher.Verify(usuario.PasswordHash, dto.PasswordActual ?? ""))
-            {
-                usuario.RegistrarFalloLogin(ahora);
-                await _usuarios.UpdateAsync(usuario);
-                throw new ReglaDeNegocioException("La contraseña actual no es correcta.", "passwordActual");
-            }
+            // What does not depend on the current password is checked first, so it never costs an attempt
             Usuario.ValidarPassword(dto.PasswordNueva, "passwordNueva");
             if (dto.PasswordNueva == dto.PasswordActual)
             {
                 throw new ReglaDeNegocioException("La contraseña nueva debe ser distinta de la actual.", "passwordNueva");
+            }
+
+            var ahora = _reloj.GetUtcNow().UtcDateTime;
+            var permitido = false;
+            await _usuarios.ModificarAsync(usuario.Id, u =>
+            {
+                permitido = u.ReservarIntentoLogin(ahora);
+                return true;
+            });
+            if (!permitido)
+            {
+                throw new DemasiadosIntentosException("Demasiados intentos. Probá de nuevo en unos minutos.");
+            }
+            if (!_hasher.Verify(usuario.PasswordHash, dto.PasswordActual ?? ""))
+            {
+                throw new ReglaDeNegocioException("La contraseña actual no es correcta.", "passwordActual");
             }
 
             usuario.CambiarPassword(_hasher.Hash(dto.PasswordNueva));

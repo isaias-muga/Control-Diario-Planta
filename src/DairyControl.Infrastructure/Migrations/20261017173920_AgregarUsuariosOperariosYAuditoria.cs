@@ -65,7 +65,8 @@ namespace DairyControl.Infrastructure.Migrations
                     LoginBloqueadoHastaUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     FallosPin = table.Column<int>(type: "int", nullable: false),
                     PrimerFalloPinUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    PinBloqueadoHastaUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
+                    PinBloqueadoHastaUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: true)
                 },
                 constraints: table =>
                 {

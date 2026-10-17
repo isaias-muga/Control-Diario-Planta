@@ -31,6 +31,7 @@ export class ValorSecretoDialog {
   private dialogRef = inject<MatDialogRef<ValorSecretoDialog, boolean>>(MatDialogRef);
 
   protected readonly esPin = this.data.tipo === 'pin';
+  protected readonly pinLength = PIN_LENGTH;
   protected readonly mensajeValidacion = this.esPin ? `El PIN tiene ${PIN_LENGTH} dígitos.` : `Al menos ${PASSWORD_MIN_LENGTH} caracteres.`;
 
   form = this.fb.nonNullable.group({

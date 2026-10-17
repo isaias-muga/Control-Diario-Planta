@@ -84,6 +84,13 @@ namespace DairyControl.Api.Tests
             var usuario = Usuario.Crear(username ?? "u" + Guid.NewGuid().ToString("N")[..10], "Persona de prueba", rol, hash, debeCambiarPassword);
             Usuarios.Setup(u => u.GetByIdAsync(usuario.Id)).ReturnsAsync(usuario);
             Usuarios.Setup(u => u.GetByUsernameAsync(usuario.Username)).ReturnsAsync(usuario);
+            // Like the real repository: the change is applied to the user and saved
+            Usuarios.Setup(u => u.ModificarAsync(usuario.Id, It.IsAny<Func<Usuario, bool>>()))
+                .Returns<Guid, Func<Usuario, bool>>((_, cambio) =>
+                {
+                    cambio(usuario);
+                    return Task.FromResult<Usuario?>(usuario);
+                });
             return usuario;
         }
 

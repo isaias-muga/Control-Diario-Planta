@@ -112,18 +112,26 @@ namespace DairyControl.Domain.Entities
 
         public bool LoginBloqueado(DateTime ahoraUtc) => LoginBloqueadoHastaUtc > ahoraUtc;
 
-        public void RegistrarFalloLogin(DateTime ahoraUtc)
+        /// <summary>
+        /// Reserves one login attempt BEFORE the password is checked, so attempts made at the same time cannot all be checked against the
+        /// same count. Returns false when the user is locked: the sixth attempt after five reserved ones starts the lock. A correct password
+        /// then clears the count (<see cref="ReiniciarFallosLogin"/>); a wrong one leaves the attempt counted.
+        /// </summary>
+        public bool ReservarIntentoLogin(DateTime ahoraUtc)
         {
             if (LoginBloqueado(ahoraUtc))
             {
-                return;
+                return false;
             }
-            FallosLogin++;
             if (FallosLogin >= MaxFallosLogin)
             {
                 LoginBloqueadoHastaUtc = ahoraUtc + BloqueoLogin;
                 FallosLogin = 0;
+                return false;
             }
+            LoginBloqueadoHastaUtc = null;
+            FallosLogin++;
+            return true;
         }
 
         public void ReiniciarFallosLogin()
@@ -134,28 +142,58 @@ namespace DairyControl.Domain.Entities
 
         public bool PinBloqueado(DateTime ahoraUtc) => PinBloqueadoHastaUtc > ahoraUtc;
 
-        /// <summary>Counts a wrong PIN; the fifth one inside the window blocks PIN checks for a while.</summary>
-        public void RegistrarPinIncorrecto(DateTime ahoraUtc)
+        /// <summary>
+        /// Reserves one PIN attempt BEFORE the PIN is checked (see <see cref="ReservarIntentoLogin"/>): at most five attempts can be pending
+        /// in a window of ten minutes. A correct PIN gives its attempt back (<see cref="ConfirmarPinCorrecto"/>), so loading recepciones does
+        /// not wear the allowance down, and a correct PIN never gives back the attempts that were wrong.
+        /// </summary>
+        public bool ReservarIntentoPin(DateTime ahoraUtc)
         {
+            if (PinBloqueado(ahoraUtc))
+            {
+                return false;
+            }
             if (PrimerFalloPinUtc is null || ahoraUtc - PrimerFalloPinUtc > VentanaPin)
             {
                 FallosPin = 0;
                 PrimerFalloPinUtc = ahoraUtc;
             }
-            FallosPin++;
             if (FallosPin >= MaxFallosPin)
             {
                 PinBloqueadoHastaUtc = ahoraUtc + BloqueoPin;
                 FallosPin = 0;
                 PrimerFalloPinUtc = null;
+                return false;
+            }
+            PinBloqueadoHastaUtc = null;
+            FallosPin++;
+            return true;
+        }
+
+        /// <summary>The PIN was right: its reserved attempt is given back.</summary>
+        public void ConfirmarPinCorrecto()
+        {
+            if (FallosPin > 0)
+            {
+                FallosPin--;
+            }
+            if (FallosPin == 0)
+            {
+                PrimerFalloPinUtc = null;
             }
         }
 
-        public void RegistrarPinCorrecto()
+        /// <summary>The PIN was wrong: when it was the fifth in the window the block starts now. Returns true if the PIN checks are now blocked.</summary>
+        public bool ConfirmarPinIncorrecto(DateTime ahoraUtc)
         {
+            if (FallosPin < MaxFallosPin)
+            {
+                return false;
+            }
+            PinBloqueadoHastaUtc = ahoraUtc + BloqueoPin;
             FallosPin = 0;
             PrimerFalloPinUtc = null;
-            PinBloqueadoHastaUtc = null;
+            return true;
         }
 
         private static string ValidarUsername(string? username)

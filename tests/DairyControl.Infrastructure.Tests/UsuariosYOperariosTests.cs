@@ -1,6 +1,7 @@
 using DairyControl.Application.Settings;
 using DairyControl.Domain.Entities;
 using DairyControl.Domain.Enums;
+using DairyControl.Domain.Exceptions;
 using DairyControl.Domain.ValueObjects;
 using DairyControl.Infrastructure.Persistence;
 using DairyControl.Infrastructure.Persistence.Repositories;
@@ -23,6 +24,7 @@ namespace DairyControl.Infrastructure.Tests
             _connection.Open();
             using var context = NuevoContexto();
             context.Database.EnsureCreated();
+            UsuariosDePrueba.InstalarVersionDeFila(context);
         }
 
         public void Dispose() => _connection.Dispose();
@@ -64,9 +66,9 @@ namespace DairyControl.Infrastructure.Tests
             {
                 var repositorio = new UsuarioRepository(context);
                 var usuario = (await repositorio.GetByUsernameAsync("maria"))!;
-                for (var i = 0; i < Usuario.MaxFallosPin; i++)
+                for (var i = 0; i <= Usuario.MaxFallosPin; i++)
                 {
-                    usuario.RegistrarPinIncorrecto(ahora);
+                    usuario.ReservarIntentoPin(ahora);
                 }
 
                 // Act
@@ -77,6 +79,90 @@ namespace DairyControl.Infrastructure.Tests
             using var lectura = NuevoContexto();
             var guardado = lectura.Usuarios.AsNoTracking().Single();
             Assert.True(guardado.PinBloqueado(ahora));
+        }
+
+        [Fact]
+        public async Task ModificarAsync_SomeoneSavesInBetween_RetriesOnTopOfTheirChangeSoEveryAttemptCounts()
+        {
+            // Arrange
+            Guid id;
+            using (var escritura = NuevoContexto())
+            {
+                var usuario = Usuario.Crear("recepcion", "Celular", RolUsuario.Recepcion, "hash");
+                escritura.Usuarios.Add(usuario);
+                escritura.SaveChanges();
+                id = usuario.Id;
+            }
+            var ahora = new DateTime(2026, 10, 15, 15, 0, 0, DateTimeKind.Utc);
+            using var contexto = NuevoContexto();
+            var llamadas = 0;
+
+            // Act: another request counts its own attempt just after this one read the user and before it saved
+            await new UsuarioRepository(contexto).ModificarAsync(id, u =>
+            {
+                if (llamadas++ == 0)
+                {
+                    using var otro = NuevoContexto();
+                    new UsuarioRepository(otro).ModificarAsync(id, v => v.ReservarIntentoPin(ahora)).GetAwaiter().GetResult();
+                }
+                return u.ReservarIntentoPin(ahora);
+            });
+
+            // Assert: both attempts are counted (a plain read-modify-write would have kept only one), and the change ran twice
+            using var lectura = NuevoContexto();
+            Assert.Equal(2, lectura.Usuarios.AsNoTracking().Single().FallosPin);
+            Assert.Equal(2, llamadas);
+        }
+
+        [Fact]
+        public async Task ModificarAsync_AlwaysOutrun_GivesUpWithTooManyAttempts()
+        {
+            // Arrange
+            Guid id;
+            using (var escritura = NuevoContexto())
+            {
+                var usuario = Usuario.Crear("recepcion", "Celular", RolUsuario.Recepcion, "hash");
+                escritura.Usuarios.Add(usuario);
+                escritura.SaveChanges();
+                id = usuario.Id;
+            }
+            var ahora = new DateTime(2026, 10, 15, 15, 0, 0, DateTimeKind.Utc);
+            using var contexto = NuevoContexto();
+
+            // Act & Assert
+            await Assert.ThrowsAsync<DemasiadosIntentosException>(() => new UsuarioRepository(contexto).ModificarAsync(id, u =>
+            {
+                using var otro = NuevoContexto();
+                new UsuarioRepository(otro).ModificarAsync(id, v => { v.CambiarPassword("hash-" + Guid.NewGuid()); return true; }).GetAwaiter().GetResult();
+                return u.ReservarIntentoPin(ahora);
+            }));
+        }
+
+        [Fact]
+        public async Task ModificarAsync_UnknownUser_ReturnsNull()
+        {
+            // Arrange
+            using var contexto = NuevoContexto();
+
+            // Act
+            var resultado = await new UsuarioRepository(contexto).ModificarAsync(Guid.NewGuid(), _ => true);
+
+            // Assert
+            Assert.Null(resultado);
+        }
+
+        [Fact]
+        public void Usuarios_Rowversion_IsPartOfTheMapping()
+        {
+            // Arrange
+            using var context = NuevoContexto();
+
+            // Act
+            var propiedad = context.Model.FindEntityType(typeof(Usuario))!.FindProperty("RowVersion");
+
+            // Assert
+            Assert.NotNull(propiedad);
+            Assert.True(propiedad.IsConcurrencyToken);
         }
 
         [Fact]

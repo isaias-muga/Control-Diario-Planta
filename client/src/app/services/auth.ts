@@ -1,5 +1,5 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { Observable, tap } from 'rxjs';
@@ -37,7 +37,8 @@ export class AuthService {
 
   /** Where each person starts: the reception phone has one button, the office has the dashboard. */
   readonly inicio = computed(() => {
-    if (!this.isLoggedIn()) {
+    // A token without a role this client knows would loop between guards: it starts at the login page
+    if (!this.isLoggedIn() || this.rol() === null) {
       return '/login';
     }
     if (this.debeCambiarPassword()) {
@@ -66,6 +67,7 @@ export class AuthService {
   /** The API refused something because the password must be changed first: send the user there. */
   marcarDebeCambiarPassword(): void {
     this.debeCambiar.set(true);
+    this.cancelarRenovacion(); // renewing is refused while the password is pending
     this.router.navigate(['/cambiar-password']);
   }
 
@@ -94,7 +96,7 @@ export class AuthService {
   private programarRenovacion(): void {
     this.cancelarRenovacion();
     const sesion = this.sesion();
-    if (!sesion) {
+    if (!sesion || this.debeCambiarPassword()) {
       return;
     }
     const mitad = (sesion.emitido + (sesion.expira - sesion.emitido) / 2) * 1000;
@@ -111,8 +113,9 @@ export class AuthService {
     this.http.post<LoginResponse>(`${this.apiUrl}/renovar`, {}).subscribe({
       next: (response) => this.guardar(response),
       // A 401 is handled by the interceptor (back to login); anything else is retried a minute later
-      error: () => {
-        if (this.isLoggedIn()) {
+      error: (err: HttpErrorResponse) => {
+        // Only a connection problem or a server error is worth another try; a 4xx (403, 429) will not change by asking again
+        if (this.isLoggedIn() && (err.status === 0 || err.status >= 500)) {
           this.renovacion = setTimeout(() => this.renovar(), 60_000);
         }
       },

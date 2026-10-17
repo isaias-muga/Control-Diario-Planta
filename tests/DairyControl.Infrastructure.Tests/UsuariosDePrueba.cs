@@ -2,12 +2,27 @@ using DairyControl.Application.Seguridad;
 using DairyControl.Domain.Entities;
 using DairyControl.Domain.Enums;
 using DairyControl.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace DairyControl.Infrastructure.Tests
 {
     /// <summary>The foreign keys of the audit columns need a real user row: tests create an admin once and use its id.</summary>
     internal static class UsuariosDePrueba
     {
+        /// <summary>
+        /// SQL Server fills the rowversion of Usuarios by itself; SQLite does not, so tests install triggers that give every inserted and
+        /// every updated row a new value. They prove the repository logic, not the SQL Server column.
+        /// </summary>
+        public static void InstalarVersionDeFila(AppDbContext context)
+        {
+            context.Database.ExecuteSqlRaw(
+                "CREATE TRIGGER Usuarios_RowVersion_Insert AFTER INSERT ON Usuarios BEGIN UPDATE Usuarios SET RowVersion = randomblob(8) WHERE Id = NEW.Id; END;");
+            context.Database.ExecuteSqlRaw(
+                "CREATE TRIGGER Usuarios_RowVersion_Update AFTER UPDATE OF Username, Nombre, Rol, Activo, PasswordHash, SecurityStamp, DebeCambiarPassword, " +
+                "FallosLogin, LoginBloqueadoHastaUtc, FallosPin, PrimerFalloPinUtc, PinBloqueadoHastaUtc ON Usuarios " +
+                "BEGIN UPDATE Usuarios SET RowVersion = randomblob(8) WHERE Id = NEW.Id; END;");
+        }
+
         /// <summary>Saves an Admin (hash "hash") and returns its id.</summary>
         public static Guid CrearAdmin(AppDbContext context, string username = "admin")
         {

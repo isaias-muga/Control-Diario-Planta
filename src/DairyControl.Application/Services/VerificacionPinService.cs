@@ -41,11 +41,6 @@ namespace DairyControl.Application.Services
                 throw new ReglaDeNegocioException("No se pudo identificar al usuario.", "pin");
             }
 
-            var ahora = _reloj.GetUtcNow().UtcDateTime;
-            if (usuario.PinBloqueado(ahora))
-            {
-                throw ErrorDeBloqueo();
-            }
             if (string.IsNullOrWhiteSpace(pin))
             {
                 throw new ReglaDeNegocioException("Ingresá tu PIN de operario.", "pin");
@@ -53,19 +48,37 @@ namespace DairyControl.Application.Services
             // A malformed PIN is a typing mistake, not a guess: it does not count
             Operario.ValidarPin(pin);
 
+            // The attempt is counted BEFORE the PIN is checked, so a burst of parallel guesses cannot all see the same count
+            var ahora = _reloj.GetUtcNow().UtcDateTime;
+            var permitido = false;
+            await _usuarios.ModificarAsync(usuario.Id, u =>
+            {
+                permitido = u.ReservarIntentoPin(ahora);
+                return true;
+            });
+            if (!permitido)
+            {
+                throw ErrorDeBloqueo();
+            }
+
             var operario = await _operarios.GetActivoPorPinHashAsync(_hasher.Hash(pin));
             if (operario is null)
             {
-                usuario.RegistrarPinIncorrecto(ahora);
-                await _usuarios.UpdateAsync(usuario);
-                throw usuario.PinBloqueado(ahora) ? ErrorDeBloqueo() : new ReglaDeNegocioException("PIN incorrecto.", "pin");
+                var bloqueado = false;
+                await _usuarios.ModificarAsync(usuario.Id, u =>
+                {
+                    bloqueado = u.ConfirmarPinIncorrecto(ahora);
+                    return true;
+                });
+                throw bloqueado ? ErrorDeBloqueo() : new ReglaDeNegocioException("PIN incorrecto.", "pin");
             }
 
-            if (usuario.FallosPin > 0 || usuario.PinBloqueadoHastaUtc is not null)
+            // The right PIN gives its own attempt back; it does not give back the wrong ones
+            await _usuarios.ModificarAsync(usuario.Id, u =>
             {
-                usuario.RegistrarPinCorrecto();
-                await _usuarios.UpdateAsync(usuario);
-            }
+                u.ConfirmarPinCorrecto();
+                return true;
+            });
             return operario;
         }
 

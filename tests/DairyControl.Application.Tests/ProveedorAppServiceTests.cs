@@ -194,6 +194,7 @@ namespace DairyControl.Application.Tests
             var usuario = Usuario.Crear("recepcion", "Celular recepción", RolUsuario.Recepcion, "hash");
             var operario = Operario.Crear("Juan Pérez", "hash-1234");
             escenario.Usuarios.Setup(u => u.GetByIdAsync(escenario.UsuarioId)).ReturnsAsync(usuario);
+            escenario.Usuarios.AplicarModificaciones(usuario);
             escenario.Operarios.Setup(o => o.GetActivoPorPinHashAsync("hash-1234")).ReturnsAsync(operario);
             RecepcionLeche? agregada = null;
             escenario.Recepciones.Setup(r => r.AddAsync(It.IsAny<RecepcionLeche>()))
@@ -217,8 +218,9 @@ namespace DairyControl.Application.Tests
         {
             // Arrange
             var escenario = new Escenario(rol: RolUsuario.Recepcion);
-            escenario.Usuarios.Setup(u => u.GetByIdAsync(escenario.UsuarioId))
-                .ReturnsAsync(Usuario.Crear("recepcion", "Celular recepción", RolUsuario.Recepcion, "hash"));
+            var usuarioRecepcion = Usuario.Crear("recepcion", "Celular recepción", RolUsuario.Recepcion, "hash");
+            escenario.Usuarios.Setup(u => u.GetByIdAsync(escenario.UsuarioId)).ReturnsAsync(usuarioRecepcion);
+            escenario.Usuarios.AplicarModificaciones(usuarioRecepcion);
 
             // Act
             var ex = await Assert.ThrowsAsync<ReglaDeNegocioException>(() => escenario.Servicio().RegistrarRecepcionAsync(escenario.ProveedorId, Dto()));

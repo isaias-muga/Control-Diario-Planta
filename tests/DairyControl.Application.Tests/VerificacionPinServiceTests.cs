@@ -26,6 +26,7 @@ namespace DairyControl.Application.Tests
                 Actual.Setup(a => a.Id).Returns(Usuario.Id);
                 Actual.Setup(a => a.Rol).Returns(rol);
                 Usuarios.Setup(u => u.GetByIdAsync(Usuario.Id)).ReturnsAsync(Usuario);
+                Usuarios.AplicarModificaciones(Usuario);
                 Hasher.Setup(h => h.Hash(It.IsAny<string>())).Returns<string>(p => "hash-" + p);
                 Operarios.Setup(o => o.GetActivoPorPinHashAsync("hash-1234")).ReturnsAsync(Operario);
             }
@@ -94,7 +95,7 @@ namespace DairyControl.Application.Tests
             // Assert
             Assert.Equal("pin", ex.Campo);
             Assert.Equal(0, escenario.Usuario.FallosPin);
-            escenario.Usuarios.Verify(u => u.UpdateAsync(It.IsAny<Usuario>()), Times.Never);
+            escenario.Usuarios.Verify(u => u.ModificarAsync(It.IsAny<Guid>(), It.IsAny<Func<Usuario, bool>>()), Times.Never);
         }
 
         [Fact]
@@ -109,7 +110,7 @@ namespace DairyControl.Application.Tests
             // Assert
             Assert.Equal("pin", ex.Campo);
             Assert.Equal(1, escenario.Usuario.FallosPin);
-            escenario.Usuarios.Verify(u => u.UpdateAsync(escenario.Usuario), Times.Once);
+            escenario.Usuarios.Verify(u => u.ModificarAsync(escenario.Usuario.Id, It.IsAny<Func<Usuario, bool>>()), Times.AtLeastOnce);
         }
 
         [Fact]
@@ -142,7 +143,6 @@ namespace DairyControl.Application.Tests
 
             // Assert
             Assert.True(escenario.Usuario.PinBloqueado(Ahora.UtcDateTime));
-            escenario.Usuarios.Verify(u => u.UpdateAsync(escenario.Usuario), Times.Exactly(Usuario.MaxFallosPin));
         }
 
         [Fact]
@@ -150,9 +150,9 @@ namespace DairyControl.Application.Tests
         {
             // Arrange
             var escenario = new Escenario();
-            for (var i = 0; i < Usuario.MaxFallosPin; i++)
+            for (var i = 0; i <= Usuario.MaxFallosPin; i++)
             {
-                escenario.Usuario.RegistrarPinIncorrecto(Ahora.UtcDateTime);
+                escenario.Usuario.ReservarIntentoPin(Ahora.UtcDateTime);
             }
 
             // Act
@@ -167,9 +167,9 @@ namespace DairyControl.Application.Tests
         {
             // Arrange
             var escenario = new Escenario();
-            for (var i = 0; i < Usuario.MaxFallosPin; i++)
+            for (var i = 0; i <= Usuario.MaxFallosPin; i++)
             {
-                escenario.Usuario.RegistrarPinIncorrecto(Ahora.UtcDateTime);
+                escenario.Usuario.ReservarIntentoPin(Ahora.UtcDateTime);
             }
             var despues = new RelojFijo(Ahora.AddMinutes(6));
 
@@ -183,9 +183,9 @@ namespace DairyControl.Application.Tests
         }
 
         [Fact]
-        public async Task ResolverAsync_RightPinAfterSomeFailures_ResetsTheCount()
+        public async Task ResolverAsync_RightPinAfterAWrongOne_DoesNotGiveTheWrongAttemptBack()
         {
-            // Arrange
+            // Arrange: a colleague cannot reset the allowance by using their own PIN between guesses
             var escenario = new Escenario();
             var servicio = escenario.Servicio();
             await Assert.ThrowsAsync<ReglaDeNegocioException>(() => servicio.ResolverAsync("9999"));
@@ -194,20 +194,41 @@ namespace DairyControl.Application.Tests
             await servicio.ResolverAsync("1234");
 
             // Assert
-            Assert.Equal(0, escenario.Usuario.FallosPin);
+            Assert.Equal(1, escenario.Usuario.FallosPin);
         }
 
         [Fact]
-        public async Task ResolverAsync_RightPinWithNoFailures_DoesNotWriteAnything()
+        public async Task ResolverAsync_ManyRightPins_NeverWearTheAllowanceDown()
         {
             // Arrange
             var escenario = new Escenario();
+            var servicio = escenario.Servicio();
 
             // Act
-            await escenario.Servicio().ResolverAsync("1234");
+            for (var i = 0; i < 20; i++)
+            {
+                await servicio.ResolverAsync("1234");
+            }
 
             // Assert
-            escenario.Usuarios.Verify(u => u.UpdateAsync(It.IsAny<Usuario>()), Times.Never);
+            Assert.Equal(0, escenario.Usuario.FallosPin);
+            Assert.False(escenario.Usuario.PinBloqueado(Ahora.UtcDateTime));
+        }
+
+        [Fact]
+        public async Task ResolverAsync_FourWrongGuessesBetweenRightPins_StillBlocksOnTheFifthWrongOne()
+        {
+            // Arrange
+            var escenario = new Escenario();
+            var servicio = escenario.Servicio();
+            for (var i = 0; i < 4; i++)
+            {
+                await Assert.ThrowsAsync<ReglaDeNegocioException>(() => servicio.ResolverAsync("9999"));
+                await servicio.ResolverAsync("1234");
+            }
+
+            // Act & Assert
+            await Assert.ThrowsAsync<DemasiadosIntentosException>(() => servicio.ResolverAsync("9999"));
         }
     }
 }

@@ -23,29 +23,66 @@ namespace DairyControl.Api.Tests
 
         // Method, path, the roles that may call it. Anything else is 403; without a token it is 401.
         // The reply of an allowed call may be anything but 401/403 (the data behind it is mocked): only authorization is under test.
-        public static TheoryData<string, string, RolUsuario[]> Matriz => new()
+        private static readonly (string Metodo, string Ruta, RolUsuario[] Roles)[] Filas =
+        [
+            ("GET", "/api/Proveedores", [RolUsuario.Admin, RolUsuario.Oficina]),
+            ("GET", "/api/Proveedores/opciones", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
+            ("GET", $"/api/Proveedores/{UnId}", [RolUsuario.Admin, RolUsuario.Oficina]),
+            ("POST", "/api/Proveedores", [RolUsuario.Admin]),
+            ("POST", $"/api/Proveedores/{UnId}/recepciones", [RolUsuario.Admin, RolUsuario.Recepcion]),
+            ("GET", "/api/Recepciones?desde=2026-10-01&hasta=2026-10-02", [RolUsuario.Admin, RolUsuario.Oficina]),
+            ("GET", "/api/Recepciones/resumen?desde=2026-10-01&hasta=2026-10-02", [RolUsuario.Admin, RolUsuario.Oficina]),
+            ("GET", "/api/Recepciones/siguiente-ticket", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
+            ("GET", "/api/Configuracion/calidad", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
+            ("PUT", "/api/Configuracion/calidad", [RolUsuario.Admin]),
+            ("GET", "/api/Usuarios", [RolUsuario.Admin]),
+            ("POST", "/api/Usuarios", [RolUsuario.Admin]),
+            ("POST", $"/api/Usuarios/{UnId}/desactivar", [RolUsuario.Admin]),
+            ("POST", $"/api/Usuarios/{UnId}/restablecer-password", [RolUsuario.Admin]),
+            ("GET", "/api/Operarios", [RolUsuario.Admin]),
+            ("POST", "/api/Operarios", [RolUsuario.Admin]),
+            ("POST", $"/api/Operarios/{UnId}/desactivar", [RolUsuario.Admin]),
+            ("PUT", $"/api/Operarios/{UnId}/pin", [RolUsuario.Admin]),
+            ("POST", "/api/Auth/renovar", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
+            ("POST", "/api/Auth/cambiar-password", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
+        ];
+
+
+        public static TheoryData<string, string, RolUsuario[]> Matriz
         {
-            { "GET", "/api/Proveedores", [RolUsuario.Admin, RolUsuario.Oficina] },
-            { "GET", "/api/Proveedores/opciones", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion] },
-            { "GET", $"/api/Proveedores/{UnId}", [RolUsuario.Admin, RolUsuario.Oficina] },
-            { "POST", "/api/Proveedores", [RolUsuario.Admin] },
-            { "POST", $"/api/Proveedores/{UnId}/recepciones", [RolUsuario.Admin, RolUsuario.Recepcion] },
-            { "GET", "/api/Recepciones?desde=2026-10-01&hasta=2026-10-02", [RolUsuario.Admin, RolUsuario.Oficina] },
-            { "GET", "/api/Recepciones/resumen?desde=2026-10-01&hasta=2026-10-02", [RolUsuario.Admin, RolUsuario.Oficina] },
-            { "GET", "/api/Recepciones/siguiente-ticket", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion] },
-            { "GET", "/api/Configuracion/calidad", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion] },
-            { "PUT", "/api/Configuracion/calidad", [RolUsuario.Admin] },
-            { "GET", "/api/Usuarios", [RolUsuario.Admin] },
-            { "POST", "/api/Usuarios", [RolUsuario.Admin] },
-            { "POST", $"/api/Usuarios/{UnId}/desactivar", [RolUsuario.Admin] },
-            { "POST", $"/api/Usuarios/{UnId}/restablecer-password", [RolUsuario.Admin] },
-            { "GET", "/api/Operarios", [RolUsuario.Admin] },
-            { "POST", "/api/Operarios", [RolUsuario.Admin] },
-            { "POST", $"/api/Operarios/{UnId}/desactivar", [RolUsuario.Admin] },
-            { "PUT", $"/api/Operarios/{UnId}/pin", [RolUsuario.Admin] },
-            { "POST", "/api/Auth/renovar", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion] },
-            { "POST", "/api/Auth/cambiar-password", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion] },
-        };
+            get
+            {
+                var datos = new TheoryData<string, string, RolUsuario[]>();
+                foreach (var (metodo, ruta, roles) in Filas)
+                {
+                    datos.Add(metodo, ruta, roles);
+                }
+                return datos;
+            }
+        }
+
+        // "GET /api/Proveedores/3f2c...?x=1" -> "GET api/Proveedores/{id}" (the shape the router has)
+        private static string Forma(string metodo, string ruta) =>
+            metodo + " " + System.Text.RegularExpressions.Regex.Replace(ruta.Split('?')[0].TrimStart('/'), "[0-9a-f]{8}-[0-9a-f-]{27}", "{id}");
+
+        [Fact]
+        public void Matrix_CoversEveryEndpointOfTheControllers()
+        {
+            // Arrange: every controller endpoint the application really maps (the anonymous login is tested apart)
+            var mapeados = _fabrica.Services.GetServices<EndpointDataSource>().SelectMany(f => f.Endpoints).OfType<RouteEndpoint>()
+                .Where(e => e.Metadata.GetMetadata<Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor>() is not null)
+                .Where(e => e.Metadata.GetMetadata<IAllowAnonymous>() is null)
+                .SelectMany(e => e.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Select(m => m + " " + e.RoutePattern.RawText))
+                .ToList();
+
+            // Act
+            var enLaMatriz = Filas.Select(f => Forma(f.Metodo, f.Ruta)).ToHashSet();
+
+            // Assert: a new action that is not in the matrix fails here, and so does a row for an endpoint that no longer exists
+            Assert.True(mapeados.Count >= 19, "Expected the API endpoints, found " + mapeados.Count);
+            Assert.All(mapeados, m => Assert.Contains(m, enLaMatriz));
+            Assert.All(enLaMatriz, m => Assert.Contains(m, mapeados));
+        }
 
         private static HttpRequestMessage Pedido(string metodo, string ruta) => new(new HttpMethod(metodo), ruta)
         {

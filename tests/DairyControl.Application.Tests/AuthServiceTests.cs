@@ -28,6 +28,7 @@ namespace DairyControl.Application.Tests
                 Usuario = Usuario.Crear("maria", "María Pérez", rol, "hash-guardado", debeCambiar);
                 Usuarios.Setup(u => u.GetByUsernameAsync("maria")).ReturnsAsync(Usuario);
                 Usuarios.Setup(u => u.GetByIdAsync(Usuario.Id)).ReturnsAsync(Usuario);
+                Usuarios.AplicarModificaciones(Usuario);
                 Hasher.Setup(h => h.Verify("hash-guardado", "clave-correcta")).Returns(true);
                 Hasher.Setup(h => h.Hash(It.IsAny<string>())).Returns<string>(p => "hash-de-" + p);
                 Actual.Setup(a => a.Id).Returns(Usuario.Id);
@@ -111,7 +112,7 @@ namespace DairyControl.Application.Tests
             // Assert
             Assert.Null(result);
             Assert.Equal(1, escenario.Usuario.FallosLogin);
-            escenario.Usuarios.Verify(u => u.UpdateAsync(escenario.Usuario), Times.Once);
+            escenario.Usuarios.Verify(u => u.ModificarAsync(escenario.Usuario.Id, It.IsAny<Func<Usuario, bool>>()), Times.Once);
         }
 
         [Fact]
@@ -127,7 +128,7 @@ namespace DairyControl.Application.Tests
             // Assert
             Assert.Null(result);
             escenario.Hasher.Verify(h => h.Verify(It.IsAny<string>(), "clave"), Times.Once); // same work as for a known user
-            escenario.Usuarios.Verify(u => u.UpdateAsync(It.IsAny<Usuario>()), Times.Never);
+            escenario.Usuarios.Verify(u => u.ModificarAsync(It.IsAny<Guid>(), It.IsAny<Func<Usuario, bool>>()), Times.Never);
         }
 
         [Fact]
@@ -334,9 +335,9 @@ namespace DairyControl.Application.Tests
         {
             // Arrange
             var escenario = new Escenario();
-            for (var i = 0; i < Usuario.MaxFallosLogin; i++)
+            for (var i = 0; i <= Usuario.MaxFallosLogin; i++)
             {
-                escenario.Usuario.RegistrarFalloLogin(Ahora.UtcDateTime);
+                escenario.Usuario.ReservarIntentoLogin(Ahora.UtcDateTime);
             }
 
             // Act & Assert

@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DairyControl.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261017164151_AgregarUsuariosOperariosYAuditoria")]
+    [Migration("20261017173920_AgregarUsuariosOperariosYAuditoria")]
     partial class AgregarUsuariosOperariosYAuditoria
     {
         /// <inheritdoc />
@@ -185,6 +185,11 @@ namespace DairyControl.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<Guid>("SecurityStamp")
                         .HasColumnType("uniqueidentifier");

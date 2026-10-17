@@ -178,10 +178,11 @@ namespace DairyControl.Domain.Tests
         {
             // Arrange
             var usuario = NuevoUsuario();
-            for (var i = 0; i < Usuario.MaxFallosLogin; i++)
+            for (var i = 0; i <= Usuario.MaxFallosLogin; i++)
             {
-                usuario.RegistrarFalloLogin(Ahora);
+                usuario.ReservarIntentoLogin(Ahora);
             }
+            Assert.True(usuario.LoginBloqueado(Ahora));
 
             // Act
             usuario.RestablecerPassword("hash-temporal");
@@ -219,126 +220,180 @@ namespace DairyControl.Domain.Tests
         }
 
         [Fact]
-        public void RegistrarFalloLogin_FourFailures_DoesNotLock()
+        public void ReservarIntentoLogin_FirstFiveAttempts_AreAllowed()
         {
             // Arrange
             var usuario = NuevoUsuario();
 
-            // Act
-            for (var i = 0; i < Usuario.MaxFallosLogin - 1; i++)
+            // Act & Assert
+            for (var i = 0; i < Usuario.MaxFallosLogin; i++)
             {
-                usuario.RegistrarFalloLogin(Ahora);
+                Assert.True(usuario.ReservarIntentoLogin(Ahora));
             }
-
-            // Assert
-            Assert.False(usuario.LoginBloqueado(Ahora));
+            Assert.False(usuario.LoginBloqueado(Ahora)); // the lock starts when the next attempt finds the five used
         }
 
         [Fact]
-        public void RegistrarFalloLogin_FiveFailures_LocksForFifteenMinutes()
+        public void ReservarIntentoLogin_SixthAttempt_IsRefusedAndLocksForFifteenMinutes()
         {
             // Arrange
             var usuario = NuevoUsuario();
-
-            // Act
             for (var i = 0; i < Usuario.MaxFallosLogin; i++)
             {
-                usuario.RegistrarFalloLogin(Ahora);
+                usuario.ReservarIntentoLogin(Ahora);
             }
 
+            // Act
+            var permitido = usuario.ReservarIntentoLogin(Ahora);
+
             // Assert
+            Assert.False(permitido);
             Assert.True(usuario.LoginBloqueado(Ahora));
             Assert.True(usuario.LoginBloqueado(Ahora.AddMinutes(14)));
             Assert.False(usuario.LoginBloqueado(Ahora.AddMinutes(15).AddSeconds(1)));
         }
 
         [Fact]
-        public void ReiniciarFallosLogin_AfterFailures_StartsCountingAgain()
+        public void ReservarIntentoLogin_WhileLocked_IsRefused()
         {
             // Arrange
             var usuario = NuevoUsuario();
-            for (var i = 0; i < Usuario.MaxFallosLogin - 1; i++)
+            for (var i = 0; i <= Usuario.MaxFallosLogin; i++)
             {
-                usuario.RegistrarFalloLogin(Ahora);
+                usuario.ReservarIntentoLogin(Ahora);
+            }
+
+            // Act & Assert
+            Assert.False(usuario.ReservarIntentoLogin(Ahora.AddMinutes(5)));
+        }
+
+        [Fact]
+        public void ReservarIntentoLogin_AfterTheLockExpires_AllowsAgain()
+        {
+            // Arrange
+            var usuario = NuevoUsuario();
+            for (var i = 0; i <= Usuario.MaxFallosLogin; i++)
+            {
+                usuario.ReservarIntentoLogin(Ahora);
+            }
+
+            // Act & Assert
+            Assert.True(usuario.ReservarIntentoLogin(Ahora.AddMinutes(16)));
+        }
+
+        [Fact]
+        public void ReiniciarFallosLogin_AfterAttempts_StartsCountingAgain()
+        {
+            // Arrange
+            var usuario = NuevoUsuario();
+            for (var i = 0; i < Usuario.MaxFallosLogin; i++)
+            {
+                usuario.ReservarIntentoLogin(Ahora);
             }
 
             // Act
             usuario.ReiniciarFallosLogin();
-            usuario.RegistrarFalloLogin(Ahora);
 
-            // Assert
-            Assert.False(usuario.LoginBloqueado(Ahora));
+            // Assert: five new attempts are allowed
+            for (var i = 0; i < Usuario.MaxFallosLogin; i++)
+            {
+                Assert.True(usuario.ReservarIntentoLogin(Ahora));
+            }
         }
 
         [Fact]
-        public void RegistrarPinIncorrecto_FiveWithinTheWindow_BlocksForFiveMinutes()
+        public void ReservarIntentoPin_FiveAttemptsInTheWindow_AreAllowedAndTheSixthIsRefused()
         {
             // Arrange
             var usuario = NuevoUsuario(RolUsuario.Recepcion);
 
-            // Act
+            // Act & Assert
             for (var i = 0; i < Usuario.MaxFallosPin; i++)
             {
-                usuario.RegistrarPinIncorrecto(Ahora.AddMinutes(i));
+                Assert.True(usuario.ReservarIntentoPin(Ahora.AddMinutes(i)));
             }
-
-            // Assert
-            var ultimo = Ahora.AddMinutes(Usuario.MaxFallosPin - 1);
+            var ultimo = Ahora.AddMinutes(Usuario.MaxFallosPin);
+            Assert.False(usuario.ReservarIntentoPin(ultimo));
             Assert.True(usuario.PinBloqueado(ultimo));
             Assert.True(usuario.PinBloqueado(ultimo.AddMinutes(4)));
             Assert.False(usuario.PinBloqueado(ultimo.AddMinutes(5).AddSeconds(1)));
         }
 
         [Fact]
-        public void RegistrarPinIncorrecto_FourWithinTheWindow_DoesNotBlock()
+        public void ConfirmarPinIncorrecto_TheFifthWrongOne_BlocksAtOnce()
         {
             // Arrange
             var usuario = NuevoUsuario(RolUsuario.Recepcion);
-
-            // Act
             for (var i = 0; i < Usuario.MaxFallosPin - 1; i++)
             {
-                usuario.RegistrarPinIncorrecto(Ahora);
+                usuario.ReservarIntentoPin(Ahora);
+                Assert.False(usuario.ConfirmarPinIncorrecto(Ahora));
             }
+            usuario.ReservarIntentoPin(Ahora);
+
+            // Act
+            var bloqueado = usuario.ConfirmarPinIncorrecto(Ahora);
 
             // Assert
-            Assert.False(usuario.PinBloqueado(Ahora));
+            Assert.True(bloqueado);
+            Assert.True(usuario.PinBloqueado(Ahora));
         }
 
         [Fact]
-        public void RegistrarPinIncorrecto_FailuresSpreadOverMoreThanTheWindow_DoNotBlock()
+        public void ReservarIntentoPin_AttemptsSpreadOverMoreThanTheWindow_DoNotAccumulate()
         {
             // Arrange
             var usuario = NuevoUsuario(RolUsuario.Recepcion);
             for (var i = 0; i < Usuario.MaxFallosPin - 1; i++)
             {
-                usuario.RegistrarPinIncorrecto(Ahora);
+                usuario.ReservarIntentoPin(Ahora);
             }
 
-            // Act: the fifth one comes after the 10-minute window of the first four
-            usuario.RegistrarPinIncorrecto(Ahora.AddMinutes(11));
+            // Act: the next one comes after the ten minutes of the window, which starts counting again
+            var permitido = usuario.ReservarIntentoPin(Ahora.AddMinutes(11));
 
             // Assert
-            Assert.False(usuario.PinBloqueado(Ahora.AddMinutes(11)));
-        }
-
-        [Fact]
-        public void RegistrarPinCorrecto_AfterFailures_ResetsTheCount()
-        {
-            // Arrange
-            var usuario = NuevoUsuario(RolUsuario.Recepcion);
-            for (var i = 0; i < Usuario.MaxFallosPin - 1; i++)
-            {
-                usuario.RegistrarPinIncorrecto(Ahora);
-            }
-
-            // Act
-            usuario.RegistrarPinCorrecto();
-            usuario.RegistrarPinIncorrecto(Ahora);
-
-            // Assert
-            Assert.False(usuario.PinBloqueado(Ahora));
+            Assert.True(permitido);
             Assert.Equal(1, usuario.FallosPin);
+        }
+
+        [Fact]
+        public void ConfirmarPinCorrecto_GivesBackItsOwnAttemptOnly()
+        {
+            // Arrange
+            var usuario = NuevoUsuario(RolUsuario.Recepcion);
+            for (var i = 0; i < 4; i++)
+            {
+                usuario.ReservarIntentoPin(Ahora); // four wrong guesses stay counted
+            }
+            usuario.ReservarIntentoPin(Ahora); // the right PIN of a colleague
+
+            // Act
+            usuario.ConfirmarPinCorrecto();
+
+            // Assert: the four wrong ones are still there, so the guesser cannot reset the allowance with a PIN of their own
+            Assert.Equal(4, usuario.FallosPin);
+            Assert.True(usuario.ReservarIntentoPin(Ahora));
+            Assert.False(usuario.PinBloqueado(Ahora));
+        }
+
+        [Fact]
+        public void ConfirmarPinCorrecto_WithNoWrongAttempts_LeavesTheAllowanceUntouched()
+        {
+            // Arrange
+            var usuario = NuevoUsuario(RolUsuario.Recepcion);
+
+            // Act: ten loads in a row, each reserving and giving back its attempt
+            for (var i = 0; i < 10; i++)
+            {
+                Assert.True(usuario.ReservarIntentoPin(Ahora));
+                usuario.ConfirmarPinCorrecto();
+            }
+
+            // Assert
+            Assert.Equal(0, usuario.FallosPin);
+            Assert.Null(usuario.PrimerFalloPinUtc);
+            Assert.False(usuario.PinBloqueado(Ahora));
         }
     }
 }

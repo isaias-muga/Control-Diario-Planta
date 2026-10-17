@@ -52,6 +52,12 @@ describe('role guards', () => {
     expect(destino(ejecutar(roleGuard('Recepcion')))).toBe('/resumen');
   });
 
+  it('sends a token with a role the client does not know to the login page instead of looping', () => {
+    iniciarSesionDePrueba('Admin', { role: 'Superman' });
+
+    expect(destino(ejecutar(roleGuard('Admin', 'Oficina')))).toBe('/login');
+  });
+
   it('keeps a user who must change the password on the change page, whatever the role', () => {
     iniciarSesionDePrueba('Admin', { dcp: '1' });
 

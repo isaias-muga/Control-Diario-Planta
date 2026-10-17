@@ -75,6 +75,14 @@ describe('AuthService', () => {
     expect(service.nombre()).toBe('Persona de prueba');
   });
 
+  it('a token with a role this client does not know starts at the login page (no redirect loop)', () => {
+    localStorage.setItem('dairycontrol_token', tokenDePrueba('Admin', { role: 'Superman' }));
+    const service = crear();
+
+    expect(service.rol()).toBeNull();
+    expect(service.inicio()).toBe('/login');
+  });
+
   it('a user whose token says the password must be changed starts at the change page', () => {
     const service = crear('Oficina', { dcp: '1' });
 
@@ -149,6 +157,24 @@ describe('AuthService', () => {
       vi.advanceTimersByTime(10);
 
       http.expectOne((r) => r.url.endsWith('/Auth/renovar')).flush({ token: tokenDePrueba('Oficina'), debeCambiarPassword: false });
+    });
+
+    it('does not retry a renewal that the server refused (a 4xx will not change by asking again)', () => {
+      crear('Admin');
+      vi.advanceTimersByTime(6 * 3600 * 1000 + 1000);
+      http.expectOne((r) => r.url.endsWith('/Auth/renovar')).flush({ error: 'No tenés permiso para esta acción.' }, { status: 403, statusText: 'Forbidden' });
+
+      vi.advanceTimersByTime(10 * 60_000);
+
+      http.expectNone((r) => r.url.endsWith('/Auth/renovar'));
+    });
+
+    it('does not schedule a renewal for a user who must change the password', () => {
+      crear('Oficina', { dcp: '1' });
+
+      vi.advanceTimersByTime(7 * 3600 * 1000);
+
+      http.expectNone((r) => r.url.endsWith('/Auth/renovar'));
     });
 
     it('does not renew an expired token (the next request gets a 401 and goes to the login page)', () => {

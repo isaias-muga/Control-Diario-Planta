@@ -42,6 +42,9 @@ namespace DairyControl.Api.Authorization
                 opciones.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
                 opciones.OnRejected = async (contexto, cancelacion) =>
                 {
+                    // So a wrong proxy setup (everybody seen with one address) shows in the logs instead of failing silently
+                    contexto.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("RateLimiter")
+                        .LogWarning("Login rate limit reached for address {Address}", contexto.HttpContext.Connection.RemoteIpAddress);
                     contexto.HttpContext.Response.ContentType = "application/json";
                     await contexto.HttpContext.Response.WriteAsync(
                         JsonSerializer.Serialize(ApiErrors.Body("Demasiados intentos. Probá de nuevo en un minuto.")), cancelacion);

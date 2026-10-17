@@ -20,7 +20,10 @@ export const roleGuard =
       return router.createUrlTree(['/cambiar-password']);
     }
     const rol = auth.rol();
-    return rol !== null && roles.includes(rol) ? true : router.createUrlTree([auth.inicio()]);
+    if (rol === null) {
+      return router.createUrlTree(['/login']); // a token with no role this client knows
+    }
+    return roles.includes(rol) ? true : router.createUrlTree([auth.inicio()]);
   };
 
 /** The page to change the password: for anyone logged in. */
