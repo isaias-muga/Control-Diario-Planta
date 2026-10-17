@@ -31,6 +31,10 @@ import { litrosReales, motivosFueraDeRango } from '../../utils/calidad';
 import { errorNumero } from '../../utils/numero-es';
 import { ahoraEnPlanta, formatearFecha } from '../../utils/periodos';
 
+function textoFechaHora(fechaHora: string): string {
+  return `${formatearFecha(fechaHora.slice(0, 10))} ${fechaHora.slice(11, 16)}`;
+}
+
 type Paso = 'carga' | 'confirmar' | 'listo';
 type Medicion = 'acidez' | 'temperatura' | 'agua';
 
@@ -117,10 +121,11 @@ export class CargaRapida {
     return motivosFueraDeRango(limites, { acidez, temperatura, aguaPorcentaje });
   });
 
-  protected fechaHoraTexto = computed(() => {
-    const fechaHora = this.valores().fechaHora ?? '';
-    return `${formatearFecha(fechaHora.slice(0, 10))} ${fechaHora.slice(11, 16)}`;
-  });
+  protected fechaHoraTexto = computed(() => textoFechaHora(this.valores().fechaHora ?? ''));
+
+  /** Plant time shown in the help line of step 1; the moment actually saved is fixed on "Revisar datos". */
+  private ahora = signal(ahoraEnPlanta());
+  protected ahoraTexto = computed(() => textoFechaHora(this.ahora()));
 
   constructor() {
     // The ticket is required here: the operator copies it from the plant's paper ticket
@@ -174,6 +179,7 @@ export class CargaRapida {
   corregir(): void {
     this.fallo.set(null);
     this.reintento = false;
+    this.ahora.set(ahoraEnPlanta());
     this.irA('carga');
   }
 
@@ -184,6 +190,7 @@ export class CargaRapida {
     this.errorCarga.set(null);
     this.reintento = false;
     this.cargarSiguienteTicket();
+    this.ahora.set(ahoraEnPlanta());
     this.irA('carga');
   }
 

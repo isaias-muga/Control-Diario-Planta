@@ -27,7 +27,7 @@ async function sinScrollHorizontal(page: Page): Promise<void> {
 async function abrirCargaRapida(page: Page): Promise<void> {
   await page.getByRole('link', { name: 'Recepciones', exact: true }).click();
   await page.getByRole('link', { name: 'Carga rápida' }).click();
-  await expect(page.getByRole('heading', { name: 'Carga rápida' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Nueva recepción' })).toBeVisible();
 }
 
 /** Fills step 1 (the proveedor is chosen from the list; the ticket replaces the suggested one). */
@@ -37,7 +37,7 @@ async function llenar(page: Page, c: Carga): Promise<void> {
   await rellenar(page.getByLabel(/^Ticket/), String(c.ticket));
   await rellenar(page.getByLabel(/^Litros/), c.litros ?? '1500');
   await rellenar(page.getByLabel(/^Acidez/), c.acidez ?? '16');
-  await rellenar(page.getByLabel(/^Temperatura/), c.temperatura ?? '5');
+  await rellenar(page.getByLabel(/^Temp/), c.temperatura ?? '5');
 }
 
 async function nuevaCarga(page: Page, c: Partial<Carga> = {}): Promise<Carga> {
@@ -52,7 +52,7 @@ test('carga rápida: registers through the three steps at 390px and the recepci�
   const carga = await nuevaCarga(page, { litros: '1.234,5' });
   await sinScrollHorizontal(page);
 
-  await page.getByRole('button', { name: 'Continuar' }).click();
+  await page.getByRole('button', { name: 'Revisar datos' }).click();
   await expect(page.getByRole('heading', { name: '¿Son correctos estos datos?' })).toBeVisible();
   await expect(page.getByText(carga.proveedor)).toBeVisible();
   await expect(page.getByText('1.234,5').first()).toBeVisible();
@@ -60,7 +60,7 @@ test('carga rápida: registers through the three steps at 390px and the recepci�
 
   await page.getByRole('button', { name: 'Confirmar' }).click();
   await expect(page.getByRole('heading', { name: 'Recepción guardada' })).toBeVisible();
-  await expect(page.getByText(String(carga.ticket), { exact: true })).toBeVisible();
+  await expect(page.getByText(new RegExp(`Ticket ${carga.ticket} · `))).toBeVisible();
   await sinScrollHorizontal(page);
 
   await page.getByRole('link', { name: 'Ir a Recepciones' }).click();
@@ -69,25 +69,25 @@ test('carga rápida: registers through the three steps at 390px and the recepci�
 
 test('carga rápida: Nueva recepción starts an empty form', async ({ page }) => {
   await nuevaCarga(page);
-  await page.getByRole('button', { name: 'Continuar' }).click();
+  await page.getByRole('button', { name: 'Revisar datos' }).click();
   await page.getByRole('button', { name: 'Confirmar' }).click();
   await expect(page.getByRole('heading', { name: 'Recepción guardada' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Nueva recepción' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Carga rápida' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Nueva recepción' })).toBeVisible();
   await expect(page.getByLabel(/^Litros/)).toHaveValue('');
   await expect(page.getByLabel(/^Acidez/)).toHaveValue('');
 });
 
 test('carga rápida: Corregir goes back to step 1 with the values kept', async ({ page }) => {
   const carga = await nuevaCarga(page, { litros: '2000', acidez: '17,5' });
-  await page.getByRole('button', { name: 'Continuar' }).click();
+  await page.getByRole('button', { name: 'Revisar datos' }).click();
   await expect(page.getByRole('heading', { name: '¿Son correctos estos datos?' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Corregir' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Carga rápida' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Nueva recepción' })).toBeVisible();
   await expect(page.getByLabel(/^Ticket/)).toHaveValue(String(carga.ticket));
   await expect(page.getByLabel(/^Litros/)).toHaveValue('2.000'); // shown the es-AR way after the field lost focus
   await expect(page.getByLabel(/^Acidez/)).toHaveValue('17,5');
@@ -98,24 +98,24 @@ test('carga rápida: the ticket is required', async ({ page }) => {
   await nuevaCarga(page);
   await page.getByLabel(/^Ticket/).fill('');
 
-  await page.getByRole('button', { name: 'Continuar' }).click();
+  await page.getByRole('button', { name: 'Revisar datos' }).click();
 
-  await expect(page.getByText('Requerido. Número entero entre 1 y 2.147.483.647.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Carga rápida' })).toBeVisible();
+  await expect(page.getByText('Requerido. Entero entre 1 y 2.147.483.647.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Nueva recepción' })).toBeVisible();
 });
 
 test('carga rápida: a duplicate ticket shows the office message and returns to step 1 with the values kept', async ({ page }) => {
   const primera = await nuevaCarga(page);
-  await page.getByRole('button', { name: 'Continuar' }).click();
+  await page.getByRole('button', { name: 'Revisar datos' }).click();
   await page.getByRole('button', { name: 'Confirmar' }).click();
   await expect(page.getByRole('heading', { name: 'Recepción guardada' })).toBeVisible();
 
   const segunda = await nuevaCarga(page, { ticket: primera.ticket, litros: '777' });
-  await page.getByRole('button', { name: 'Continuar' }).click();
+  await page.getByRole('button', { name: 'Revisar datos' }).click();
   await page.getByRole('button', { name: 'Confirmar' }).click();
 
   await expect(page.getByText('Ese ticket ya fue cargado. Consultá en la oficina.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Carga rápida' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Nueva recepción' })).toBeVisible();
   await expect(page.getByLabel(/^Litros/)).toHaveValue('777');
   await expect(page.getByLabel(/^Ticket/)).toHaveValue(String(segunda.ticket));
 });
@@ -129,7 +129,7 @@ test('carga rápida: a double tap on Confirmar sends one request', async ({ page
     await new Promise((resolve) => setTimeout(resolve, 1000));
     await route.continue();
   });
-  await page.getByRole('button', { name: 'Continuar' }).click();
+  await page.getByRole('button', { name: 'Revisar datos' }).click();
 
   await page.getByRole('button', { name: 'Confirmar' }).dblclick();
 
@@ -140,17 +140,17 @@ test('carga rápida: a double tap on Confirmar sends one request', async ({ page
 test('carga rápida: an acidez over the limit is highlighted on the confirmation with the limit', async ({ page }) => {
   await nuevaCarga(page, { acidez: '25' });
 
-  await page.getByRole('button', { name: 'Continuar' }).click();
+  await page.getByRole('button', { name: 'Revisar datos' }).click();
 
   await expect(page.getByRole('heading', { name: '¿Son correctos estos datos?' })).toBeVisible();
-  await expect(page.getByText(/Fuera del límite \(máx\. 19 °D\)/)).toBeVisible();
+  await expect(page.getByText(/Fuera de rango \(máx\. 19\)/)).toBeVisible();
   // Only the acidez is over its limit
-  await expect(page.getByText(/Fuera del límite/)).toHaveCount(1);
+  await expect(page.getByText(/Fuera de rango/)).toHaveCount(1);
 });
 
 test('carga rápida: a network error shows "No se guardó" and Reintentar saves it', async ({ page }) => {
   const carga = await nuevaCarga(page);
-  await page.getByRole('button', { name: 'Continuar' }).click();
+  await page.getByRole('button', { name: 'Revisar datos' }).click();
   let fallos = 1;
   await page.route('**/api/Proveedores/*/recepciones', async (route) => {
     if (fallos-- > 0) {
@@ -165,12 +165,12 @@ test('carga rápida: a network error shows "No se guardó" and Reintentar saves 
   await page.getByRole('button', { name: 'Reintentar' }).click();
 
   await expect(page.getByRole('heading', { name: 'Recepción guardada' })).toBeVisible();
-  await expect(page.getByText(String(carga.ticket), { exact: true })).toBeVisible();
+  await expect(page.getByText(new RegExp(`Ticket ${carga.ticket} · `))).toBeVisible();
 });
 
 test('carga rápida: a retry that gets 409 says it was probably saved', async ({ page }) => {
   await nuevaCarga(page);
-  await page.getByRole('button', { name: 'Continuar' }).click();
+  await page.getByRole('button', { name: 'Revisar datos' }).click();
   let primera = true;
   await page.route('**/api/Proveedores/*/recepciones', async (route) => {
     if (primera) {

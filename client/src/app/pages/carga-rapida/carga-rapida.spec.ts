@@ -108,8 +108,8 @@ describe('CargaRapida', () => {
 
     expect(component.paso()).toBe('confirmar');
     expect(texto()).toContain('¿Son correctos estos datos?');
-    expect(dato('Proveedor')).toBe('Tambo Don Pedro');
-    expect(dato('Litros reales (sin agua)')).toBe('900');
+    expect(dato('Tambo')).toBe('Tambo Don Pedro');
+    expect(dato('Litros a pagar')).toBe('900');
     expect(dato('Fecha y hora')).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
   });
 
@@ -130,10 +130,21 @@ describe('CargaRapida', () => {
     component.continuar();
     fixture.detectChanges();
 
-    const fuera = Array.from(el().querySelectorAll('.dato.fuera')).map((d) => (d.textContent ?? '').replace(/\s+/g, ' ').trim());
+    const fuera = Array.from(el().querySelectorAll('.fila.fuera')).map((d) => (d.textContent ?? '').replace(/\s+/g, ' ').trim());
     expect(fuera).toHaveLength(1);
     expect(fuera[0]).toContain('Acidez 25 °D');
-    expect(fuera[0]).toContain('máx. 19 °D');
+    expect(fuera[0]).toContain('Fuera de rango (máx. 19)');
+  });
+
+  it('shows "Litros a pagar" only when there is water, and a dash for empty optional values', () => {
+    cargar();
+    component.continuar();
+    fixture.detectChanges();
+
+    expect(dato('Litros a pagar')).toBeUndefined();
+    expect(dato('Grasa')).toBe('—');
+    expect(dato('Agua')).toBe('—');
+    expect(dato('Silo')).toBe('—');
   });
 
   it('highlights nothing when every reading is within the limits', () => {
@@ -142,7 +153,7 @@ describe('CargaRapida', () => {
     component.continuar();
     fixture.detectChanges();
 
-    expect(el().querySelectorAll('.dato.fuera')).toHaveLength(0);
+    expect(el().querySelectorAll('.fila.fuera')).toHaveLength(0);
   });
 
   it('sends the recepción and shows the entered ticket, proveedor and litros on the done step', () => {
@@ -158,9 +169,9 @@ describe('CargaRapida', () => {
 
     expect(component.paso()).toBe('listo');
     expect(texto()).toContain('Recepción guardada');
-    expect(dato('Ticket')).toBe('4981');
-    expect(dato('Proveedor')).toBe('Tambo Don Pedro');
-    expect(dato('Litros')).toBe('1.200');
+    expect(texto()).toContain('Ticket 4981 · 1.200 L');
+    expect(texto()).toContain('Tambo Don Pedro');
+    expect(texto()).toContain('¿Te equivocaste? Avisá en la oficina: la corrección la hace el administrador.');
     expect(texto()).not.toContain('1.080');
   });
 
