@@ -10,17 +10,25 @@
           <p class="error" role="alert">{{ errorCarga() }}</p>
         }
 
-        <mat-form-field appearance="outline">
-          <mat-label>Proveedor</mat-label>
-          <mat-select id="proveedorId" formControlName="proveedorId">
-            @for (p of proveedores(); track p.id) {
-              <mat-option [value]="p.id">{{ p.nombre }}</mat-option>
+        @if (proveedoresCargados()) {
+          <mat-form-field appearance="outline">
+            <mat-label>Proveedor</mat-label>
+            <mat-select id="proveedorId" formControlName="proveedorId">
+              @for (p of proveedores(); track p.id) {
+                <mat-option [value]="p.id">{{ p.nombre }}</mat-option>
+              }
+            </mat-select>
+            @if (invalid('proveedorId')) {
+              <mat-error>Elegí un proveedor.</mat-error>
             }
-          </mat-select>
-          @if (invalid('proveedorId')) {
-            <mat-error>Elegí un proveedor.</mat-error>
-          }
-        </mat-form-field>
+          </mat-form-field>
+        } @else if (!proveedoresError()) {
+          <!-- Not a select yet: an empty one ignores the tap and nobody knows why -->
+          <mat-form-field appearance="outline">
+            <mat-label>Proveedor</mat-label>
+            <input matInput disabled aria-busy="true" value="Cargando proveedores…" />
+          </mat-form-field>
+        }
         @if (proveedoresError()) {
           <p class="error" role="alert">{{ proveedoresError() }}</p>
         }

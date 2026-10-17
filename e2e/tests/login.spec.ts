@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../fixtures';
 import { login, loginYEsperarResumen } from '../helpers';
 
 test('login: valid credentials open the Resumen page', async ({ page }) => {

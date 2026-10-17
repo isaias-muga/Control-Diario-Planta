@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '../fixtures';
 import { crearProveedor, irAConfiguracion, loginYEsperarResumen } from '../helpers';
 
 test.use({ viewport: { width: 390, height: 844 } });

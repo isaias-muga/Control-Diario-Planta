@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../fixtures';
 import { abrirRegistro, crearProveedor, descartarRegistro, loginYEsperarResumen, registrarRecepcion, rellenar, ticketUnico } from '../helpers';
 
 test.beforeEach(async ({ page }) => {

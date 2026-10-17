@@ -445,4 +445,60 @@ describe('CargaRapida', () => {
       ok(peticionPost());
     });
   });
+
+  describe('while the proveedores are still loading', () => {
+    /** Opens the page and answers the limits and the ticket, but NOT the proveedor options yet. */
+    async function abrirSinOpciones(): Promise<void> {
+      http.verify();
+      TestBed.resetTestingModule();
+      iniciarSesionDePrueba('Admin');
+      TestBed.configureTestingModule({
+        providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: LOCALE_ID, useValue: 'es-AR' }],
+      });
+      http = TestBed.inject(HttpTestingController);
+      vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+      fixture = TestBed.createComponent(CargaRapida);
+      component = fixture.componentInstance;
+      await fixture.whenStable();
+      http.expectOne((r) => r.url.endsWith('/Configuracion/calidad')).flush(LIMITES);
+      http.expectOne((r) => r.url.endsWith('/Recepciones/siguiente-ticket')).flush({ ticket: 4981 });
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+
+    it('shows a disabled "Cargando proveedores…" field instead of a select that would ignore the tap', async () => {
+      await abrirSinOpciones();
+
+      const campo = el().querySelector('input[aria-busy="true"]') as HTMLInputElement;
+      expect(campo).not.toBeNull();
+      expect(campo.disabled).toBe(true);
+      expect(campo.value).toBe('Cargando proveedores…');
+      expect(el().querySelector('mat-select')).toBeNull();
+
+      http.expectOne((r) => r.url.endsWith('/Proveedores/opciones')).flush([PROVEEDOR]);
+    });
+
+    it('swaps it for the real select once the options have arrived', async () => {
+      await abrirSinOpciones();
+
+      http.expectOne((r) => r.url.endsWith('/Proveedores/opciones')).flush([PROVEEDOR]);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(el().querySelector('input[aria-busy="true"]')).toBeNull();
+      expect(el().querySelector('mat-select')).not.toBeNull();
+    });
+
+    it('shows the error and no dead select when the options cannot be loaded', async () => {
+      await abrirSinOpciones();
+
+      http.expectOne((r) => r.url.endsWith('/Proveedores/opciones')).flush({ error: 'No tenés permiso para esta acción.' }, { status: 403, statusText: 'Forbidden' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(el().querySelector('mat-select')).toBeNull();
+      expect(el().querySelector('input[aria-busy="true"]')).toBeNull();
+      expect(texto()).toContain('No tenés permiso para esta acción.');
+    });
+  });
 });

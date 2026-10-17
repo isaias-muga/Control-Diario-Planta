@@ -96,6 +96,8 @@ export class CargaRapida {
   pin = new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(new RegExp(`^\\d{${PIN_LENGTH}}$`))] });
   protected readonly pinLength = PIN_LENGTH;
   proveedoresError = signal<string | null>(null);
+  /** The options have arrived: an empty select ignores the tap in silence, so it is not shown before this. */
+  proveedoresCargados = signal(false);
   private limites = signal<LimitesCalidad | null>(null);
   /** True once a send ended without an answer (network, 5xx): the next send is a retry that may duplicate it. */
   private reintento = false;
@@ -142,8 +144,10 @@ export class CargaRapida {
     // Adding a validator does not run it: without this the empty ticket would be valid until touched
     this.form.controls.ticket.updateValueAndValidity({ emitEvent: false });
     this.proveedoresService.getOpciones().subscribe({
-      next: (lista) =>
-        this.proveedores.set([...lista].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))),
+      next: (lista) => {
+        this.proveedores.set([...lista].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')));
+        this.proveedoresCargados.set(true);
+      },
       error: (err: HttpErrorResponse) =>
         this.proveedoresError.set(getApiErrorMessage(err, 'No se pudieron cargar los proveedores.')),
     });

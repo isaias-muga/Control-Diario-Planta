@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '../fixtures';
 import {
   PASSWORD_PROPIA,
   PASSWORD_TEMPORAL,
@@ -255,6 +255,8 @@ test.describe('Admin: users and operarios', () => {
     const persona = await crearUsuarioListoPorApi(request, 'Oficina');
     await loginComo(page, persona);
     await expect(page.getByRole('heading', { name: 'Resumen de recepciones' })).toBeVisible();
+    // The page is still loading its data: a request answered after the admin's change would end the session before the test acts
+    await page.waitForLoadState('networkidle');
 
     const headers = await cabecerasAutenticadas(request);
     const usuarios = await (await request.get('/api/Usuarios', { headers })).json();
@@ -269,6 +271,8 @@ test.describe('Admin: users and operarios', () => {
     const persona = await crearUsuarioListoPorApi(request, 'Oficina');
     await loginComo(page, persona);
     await expect(page.getByRole('heading', { name: 'Resumen de recepciones' })).toBeVisible();
+    // The page is still loading its data: a request answered after the admin's change would end the session before the test acts
+    await page.waitForLoadState('networkidle');
     const headers = await cabecerasAutenticadas(request);
     const usuarios = await (await request.get('/api/Usuarios', { headers })).json();
     const id = usuarios.find((u: { username: string }) => u.username === persona.username).id;

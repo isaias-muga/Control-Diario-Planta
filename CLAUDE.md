@@ -127,6 +127,7 @@ Milk reception and quality-control system for a dairy plant. Backend: .NET 10, A
   - Cells: single line; long text is truncated with an ellipsis and its full text in a `matTooltip`. Text that matters but does not fit (observaciones) is a real button (keyboard accessible, with a "ver más" affordance only when it is truncated) that opens a dialog with the full text and its context.
   - Alignment and padding: headers and cells are vertically centered with the same vertical padding; the first and last cells have the same horizontal padding, so text never touches a border or the card edge; quantities (liters, percentages, measurements) are right-aligned, identifiers (ticket, silo, codes) are centered and text is left-aligned; each header is aligned like its column.
 - Visual check: for any UI change, before reporting back, run the app and take Playwright screenshots of every changed page at 1366px and 390px wide. Check them yourself (no clipped or truncated text, no unexpected scroll, nothing touching the edges, consistent alignment), fix what is wrong, and include the screenshots in your report (in a PR, see PR evidence in the Git workflow). Launch Chromium with `ignoreDefaultArgs: ['--hide-scrollbars']`, otherwise scrollbars are invisible in the screenshots.
+- A control that needs data from the API to work (the options of a select, a suggestion) is not offered until the data is there: show a disabled "Cargando…" placeholder, never an empty control. An empty `mat-select` ignores the tap without any error, so a tap on a slow connection (or a click in a fast test) does nothing and nobody knows why. (Root cause of the e2e failure of PR #4: the quick flow's proveedor select.)
 
 ## Testing
 
@@ -151,6 +152,8 @@ Milk reception and quality-control system for a dairy plant. Backend: .NET 10, A
 - Each test creates its own proveedor and a unique ticket through the UI, so tests depend neither on each other nor on the seed. A test of a role creates its own user (and operario with a free PIN) through the admin API (`crearUsuarioListoPorApi`, `crearOperarioPorApi`); the compose stack raises the login limit for the suite. Tests that change the global quality limits restore them in `finally`; that is why they run with one worker.
 - Selectors are roles and labels (`getByRole`, `getByLabel`), never CSS classes.
 - A new critical flow gets an e2e test in the same PR.
+- CI is several times slower than a developer machine, and the first request after the API starts is the slowest. A test never acts on a control the instant a page opens: it waits for the control to be ready with a web-first assertion (`toBeEnabled`, `toBeVisible`, or a role that only exists once the data is loaded). A race like that passes locally by luck, so `e2e/fixtures.ts` delays every `/api` response when `E2E_API_LATENCY_MS` is set, and CI runs the specs of the flows that load data when they open (`carga-rapida`, `roles`) a second time with `E2E_API_LATENCY_MS=400`. Run the same command locally before a PR that adds or changes such a flow or a form that loads its own options, and put new flows of that kind in the list in `ci.yml`.
+- When the `e2e` check fails, read the evidence before changing anything: `gh run view <run> --log-failed` for the test error, the `playwright-report` artifact (error context and trace network log) for the page state and request timings, and the filtered API warnings that CI prints before the full compose logs.
 
 ### Exploratory checks
 
@@ -203,7 +206,7 @@ Fix small findings in the same PR. For anything bigger, propose a separate issue
 - Keep changes scoped to the task. Do not refactor unrelated code. If a new file is needed, justify it in the plan.
 - After making changes, run the build and the tests (and `ng build` for client changes), and report the results.
 - For UI changes, also do the visual check described in Client conventions > UI conventions.
-- Before every PR, run the Exploratory checks (Testing > Exploratory checks) and the e2e tests locally.
+- Before every PR, run the Exploratory checks (Testing > Exploratory checks) and the e2e tests locally on a fresh stack (`docker compose down -v && docker compose up --build -d`), including the slow-API run (see E2E tests) when the change touches a flow that loads data when it opens.
 - If a request conflicts with a rule in this file, stop and ask.
 - Every bug that escapes to `main` gets a regression test and, when it is a class of error (it could happen again elsewhere), a rule in this file or an architecture test, in the same PR as the fix.
 - Run the architecture review (`docs/architecture-review.md`) every 5 merged PRs and before any freeze or release: a fresh subagent reviews `main` with that checklist and this file, ranks the findings by severity and proposes issues (do not open them without approval). Every recurring class of finding becomes an architecture test or a rule here. Record each review in `docs/reviews/<yyyy-mm-dd>.md`.

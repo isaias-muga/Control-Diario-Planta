@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '../fixtures';
 import { crearProveedor, loginYEsperarResumen, registrarRecepcion, rellenar, ticketUnico } from '../helpers';
 
 const ZONA_PLANTA = 'America/Argentina/Buenos_Aires';
