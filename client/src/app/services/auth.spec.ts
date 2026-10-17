@@ -75,6 +75,16 @@ describe('AuthService', () => {
     expect(service.nombre()).toBe('Persona de prueba');
   });
 
+  it.each<[Rol, boolean]>([
+    ['Admin', true],
+    ['Oficina', true],
+    ['Recepcion', false],
+  ])('a %s can register recepciones from the screens: %s', (rol, puede) => {
+    const service = crear(rol);
+
+    expect(service.puedeRegistrar()).toBe(puede);
+  });
+
   it('a token with a role this client does not know starts at the login page (no redirect loop)', () => {
     localStorage.setItem('dairycontrol_token', tokenDePrueba('Admin', { role: 'Superman' }));
     const service = crear();

@@ -34,7 +34,7 @@ export function fechaHoraEnRango(control: AbstractControl): ValidationErrors | n
   return null;
 }
 
-/** The fields and plausible-range validators of a recepción, shared by the registration dialog and the quick flow. */
+/** The fields and plausible-range validators of a recepción, for the registration flow. */
 export function crearFormularioRecepcion(fb: FormBuilder) {
   return fb.group({
     proveedorId: ['', Validators.required],
@@ -52,10 +52,8 @@ export function crearFormularioRecepcion(fb: FormBuilder) {
       null as number | null,
       [Validators.required, Validators.min(TEMPERATURA_MIN), Validators.max(TEMPERATURA_MAX)],
     ],
-    silo: [
-      null as number | null,
-      [Validators.min(SILO_MIN), Validators.max(SILO_MAX), Validators.pattern(/^\d+$/)],
-    ],
+    // Required: chosen with the toggle buttons 1..N (N is the number of silos of the plant, read from the API)
+    silo: [null as number | null, [Validators.required, Validators.min(SILO_MIN), Validators.max(SILO_MAX)]],
     aguaPorcentaje: [
       null as number | null,
       [Validators.min(0), Validators.max(AGUA_MAX_PORCENTAJE)],

@@ -25,7 +25,7 @@ export interface RegistrarRecepcion {
   grasa: number | null;
   acidez: number;
   temperatura: number;
-  silo: number | null;
+  silo: number;
   observaciones: string | null;
   aguaPorcentaje: number | null;
   ticket: number | null;

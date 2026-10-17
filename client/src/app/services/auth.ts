@@ -33,6 +33,8 @@ export class AuthService {
   readonly nombre = computed(() => this.sesion()?.nombre ?? '');
   readonly esAdmin = computed(() => this.rol() === 'Admin');
   readonly esRecepcion = computed(() => this.rol() === 'Recepcion');
+  /** The office registers recepciones (the clerk records the plant lab measurement); everything else she only reads. */
+  readonly puedeRegistrar = computed(() => this.rol() === 'Admin' || this.rol() === 'Oficina');
   readonly debeCambiarPassword = computed(() => this.isLoggedIn() && (this.debeCambiar() || this.sesion()?.debeCambiarPassword === true));
 
   /** Where each person starts: the reception phone has one button, the office has the dashboard. */

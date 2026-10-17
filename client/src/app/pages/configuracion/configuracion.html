@@ -1,6 +1,6 @@
 <header class="encabezado">
   <h2>Configuración</h2>
-  <p class="subtitulo">Límites de calidad de la planta</p>
+  <p class="subtitulo">Límites de calidad y silos de la planta</p>
 </header>
 
 @if (loading()) {
@@ -11,7 +11,7 @@
 } @else {
   <mat-card appearance="outlined" class="limites">
     <mat-card-header>
-      <mat-card-title>Límites de calidad</mat-card-title>
+      <mat-card-title>Límites de calidad y silos</mat-card-title>
     </mat-card-header>
 
     <mat-card-content>
@@ -49,6 +49,14 @@
             <input matInput appNumero id="aguaMaxima" formControlName="aguaMaxima" />
             @if (invalid('aguaMaxima')) {
               <mat-error>{{ errorNumero(form.controls.aguaMaxima, 'Requerido, entre ' + aguaMin + ' y ' + aguaMax + '.') }}</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Cantidad de silos</mat-label>
+            <input matInput appNumero="entero" id="cantidadSilos" formControlName="cantidadSilos" />
+            @if (invalid('cantidadSilos')) {
+              <mat-error>{{ errorNumero(form.controls.cantidadSilos, 'Requerido, entero entre ' + silosMin + ' y ' + silosMax + '.') }}</mat-error>
             }
           </mat-form-field>
         </div>

@@ -4,10 +4,9 @@
     <p class="subtitulo">{{ subtitulo() }}</p>
   </div>
 
-  @if (auth.esAdmin()) {
+  @if (auth.puedeRegistrar()) {
     <div class="acciones">
-      <a mat-stroked-button routerLink="/recepciones/carga">Carga rápida</a>
-      <button mat-flat-button type="button" (click)="abrirRegistro()">+ Registrar recepción</button>
+      <a mat-flat-button routerLink="/recepciones/carga">+ Registrar recepción</a>
     </div>
   }
 </header>
