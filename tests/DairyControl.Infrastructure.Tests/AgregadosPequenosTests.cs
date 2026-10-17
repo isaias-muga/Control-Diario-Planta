@@ -1,8 +1,10 @@
 using System.Data.Common;
 using System.Globalization;
 using DairyControl.Application.DTOs;
+using DairyControl.Application.Settings;
 using DairyControl.Application.Services;
 using DairyControl.Domain.Entities;
+using DairyControl.Domain.Enums;
 using DairyControl.Domain.Exceptions;
 using DairyControl.Domain.ValueObjects;
 using DairyControl.Infrastructure.Persistence;
@@ -11,6 +13,8 @@ using DairyControl.Infrastructure.Persistence.Repositories;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Options;
+using DairyControl.Infrastructure.Security;
 
 namespace DairyControl.Infrastructure.Tests
 {
@@ -22,6 +26,7 @@ namespace DairyControl.Infrastructure.Tests
         private static readonly TimeProvider Reloj = new RelojDePrueba(new DateTimeOffset(2026, 10, 20, 15, 0, 0, TimeSpan.Zero));
 
         private readonly SqliteConnection _connection;
+        private readonly Guid _adminId;
 
         public AgregadosPequenosTests()
         {
@@ -29,6 +34,7 @@ namespace DairyControl.Infrastructure.Tests
             _connection.Open();
             using var context = NuevoContexto();
             context.Database.EnsureCreated();
+            _adminId = UsuariosDePrueba.CrearAdmin(context);
         }
 
         public void Dispose() => _connection.Dispose();
@@ -71,8 +77,8 @@ namespace DairyControl.Infrastructure.Tests
         private (Proveedor A, Proveedor B) Cargar(int deA, int deB)
         {
             using var context = NuevoContexto();
-            var a = Proveedor.Crear("Tambo A");
-            var b = Proveedor.Crear("Tambo B");
+            var a = Proveedor.Crear("Tambo A", _adminId);
+            var b = Proveedor.Crear("Tambo B", _adminId);
             context.Proveedores.AddRange(a, b);
             var ticket = 1;
             foreach (var (proveedor, cantidad) in new[] { (a, deA), (b, deB) })
@@ -80,7 +86,7 @@ namespace DairyControl.Infrastructure.Tests
                 for (var i = 0; i < cantidad; i++)
                 {
                     context.Recepciones.Add(RecepcionLeche.Registrar(
-                        proveedor.Id, ParametrosCalidad.Create(null, 17m, 5m, 1000m), Ahora.AddMinutes(-ticket), Ahora, 1, null, ticket++));
+                        proveedor.Id, ParametrosCalidad.Create(null, 17m, 5m, 1000m), Ahora.AddMinutes(-ticket), Ahora, 1, null, _adminId, null, Ahora, ticket++));
                 }
             }
             context.SaveChanges();
@@ -157,8 +163,13 @@ namespace DairyControl.Infrastructure.Tests
             Assert.Null(proveedor);
         }
 
-        private static ProveedorAppService Servicio(AppDbContext context) =>
-            new(new ProveedorRepository(context), new RecepcionRepository(context), new ProveedorQueries(context), Reloj);
+        private ProveedorAppService Servicio(AppDbContext context)
+        {
+            var actual = new UsuarioActualFijo(_adminId, RolUsuario.Admin);
+            var pin = new VerificacionPinService(new UsuarioRepository(context), new OperarioRepository(context),
+                new PinHasherHmac(Options.Create(new PinSettings { Secret = new string('s', 32) })), actual, Reloj);
+            return new(new ProveedorRepository(context), new RecepcionRepository(context), new ProveedorQueries(context), actual, pin, Reloj);
+        }
 
         private static RegistrarRecepcionDto Dto(int? ticket) => new()
         {
@@ -182,7 +193,7 @@ namespace DairyControl.Infrastructure.Tests
 
             // Assert
             Assert.NotNull(resultado);
-            Assert.Equal(251, resultado.CantidadRecepciones);
+            Assert.Equal("Tambo A", resultado.ProveedorNombre);
             AssertSinLecturaDeRecepciones(captura.Comandos);
             Assert.Single(context.ChangeTracker.Entries<RecepcionLeche>()); // only the one just registered is tracked
         }
@@ -200,7 +211,7 @@ namespace DairyControl.Infrastructure.Tests
 
             // Assert
             Assert.NotNull(resultado);
-            Assert.Equal(251, resultado.CantidadRecepciones);
+            Assert.Equal("Tambo A", resultado.ProveedorNombre);
             AssertSinLecturaDeRecepciones(captura.Comandos, conTicket: true);
             Assert.Contains(captura.Comandos, c => c.Contains("\"Ticket\" =", StringComparison.Ordinal));
             Assert.Single(context.ChangeTracker.Entries<RecepcionLeche>());
@@ -282,12 +293,12 @@ namespace DairyControl.Infrastructure.Tests
         public async Task LitrosReales_SqlAndEntity_GiveTheSameRoundedValue(string litros, string? agua)
         {
             // Arrange
-            var proveedor = Proveedor.Crear("Tambo A");
+            var proveedor = Proveedor.Crear("Tambo A", _adminId);
             var parametros = ParametrosCalidad.Create(
                 null, 17m, 5m,
                 decimal.Parse(litros, CultureInfo.InvariantCulture),
                 agua is null ? null : decimal.Parse(agua, CultureInfo.InvariantCulture));
-            var recepcion = RecepcionLeche.Registrar(proveedor.Id, parametros, Ahora.AddHours(-1), Ahora, 1, null, 1);
+            var recepcion = RecepcionLeche.Registrar(proveedor.Id, parametros, Ahora.AddHours(-1), Ahora, 1, null, _adminId, null, Ahora, 1);
             using (var escritura = NuevoContexto())
             {
                 escritura.Proveedores.Add(proveedor);

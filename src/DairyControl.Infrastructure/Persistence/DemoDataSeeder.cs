@@ -1,5 +1,6 @@
 using DairyControl.Application;
 using DairyControl.Domain.Entities;
+using DairyControl.Domain.Enums;
 using DairyControl.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -44,7 +45,7 @@ namespace DairyControl.Infrastructure.Persistence
         }
 
         // Deletes every recepción and proveedor, restores the default quality limits and reseeds,
-        // all in one transaction. The admin user lives in configuration, not in the database.
+        // all in one transaction. Users and operarios are never touched.
         public async Task ResetAndSeedAsync()
         {
             var proveedoresBorrados = 0;
@@ -91,15 +92,25 @@ namespace DairyControl.Infrastructure.Persistence
                 recepcionesBorradas);
         }
 
-        private Task AddDemoDataAsync()
+        private async Task AddDemoDataAsync()
         {
+            // The demo rows are created by the first admin (the users themselves are never reset)
+            var adminId = await _context.Usuarios.AsNoTracking()
+                .Where(u => u.Rol == RolUsuario.Admin)
+                .OrderBy(u => u.Username)
+                .Select(u => u.Id)
+                .FirstOrDefaultAsync();
+            if (adminId == Guid.Empty)
+            {
+                throw new InvalidOperationException("No hay un administrador que figure como creador de los datos de demostración.");
+            }
+
             var ahoraPlanta = HoraPlanta.Ahora(_reloj);
             var desde = ahoraPlanta.Date.AddDays(-DemoDataGenerator.DiasHistorial);
 
-            var datos = new DemoDataGenerator().Generar(desde);
+            var datos = new DemoDataGenerator().Generar(desde, adminId);
             _context.Proveedores.AddRange(datos.Proveedores);
             _context.Recepciones.AddRange(datos.Recepciones);
-            return Task.CompletedTask;
         }
     }
 }

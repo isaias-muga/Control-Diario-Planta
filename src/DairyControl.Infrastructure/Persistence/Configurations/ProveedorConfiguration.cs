@@ -11,6 +11,11 @@ namespace DairyControl.Infrastructure.Persistence.Configurations
             builder.Property(p => p.Nombre)
                 .IsRequired()
                 .HasMaxLength(Proveedor.NombreMaxLength);
+            // Who created it; rows from before users existed have none. A user is never deleted, so the FK restricts.
+            builder.HasOne<Usuario>()
+                .WithMany()
+                .HasForeignKey(p => p.CreadoPorUsuarioId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

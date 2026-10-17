@@ -16,6 +16,16 @@ namespace DairyControl.Infrastructure.Persistence.Configurations
                 .WithMany()
                 .HasForeignKey(r => r.ProveedorId)
                 .OnDelete(DeleteBehavior.Restrict);
+            // Audit: who registered it (the logged-in user), which operario identified with the PIN, and when (UTC).
+            builder.HasOne<Usuario>()
+                .WithMany()
+                .HasForeignKey(r => r.RegistradoPorUsuarioId)
+                .OnDelete(DeleteBehavior.Restrict);
+            builder.HasOne<Operario>()
+                .WithMany()
+                .HasForeignKey(r => r.OperarioId)
+                .OnDelete(DeleteBehavior.Restrict);
+            builder.Property(r => r.RegistradoEn);
             builder.OwnsOne(r => r.Parametros, p =>
             {
                 p.Property(x => x.Grasa).HasPrecision(ParametrosCalidad.Precision, ParametrosCalidad.Scale);

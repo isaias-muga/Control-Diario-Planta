@@ -1,3 +1,4 @@
+using DairyControl.Application;
 using DairyControl.Domain.Entities;
 using DairyControl.Domain.ValueObjects;
 
@@ -35,14 +36,14 @@ namespace DairyControl.Infrastructure.Persistence
 
         private readonly Random _random = new(Semilla);
 
-        public DatosDemo Generar(DateTime desde)
+        public DatosDemo Generar(DateTime desde, Guid creadoPorUsuarioId)
         {
             var proveedores = new List<Proveedor>();
             var recepciones = new List<RecepcionPendiente>();
 
             foreach (var perfil in Perfiles)
             {
-                var proveedor = Proveedor.Crear(perfil.Nombre);
+                var proveedor = Proveedor.Crear(perfil.Nombre, creadoPorUsuarioId);
 
                 for (var i = 0; i < DiasHistorial; i += perfil.CadaDias)
                 {
@@ -64,7 +65,8 @@ namespace DairyControl.Infrastructure.Persistence
             var registradas = new List<RecepcionLeche>();
             foreach (var r in recepciones.OrderBy(r => r.FechaHora))
             {
-                registradas.Add(RecepcionLeche.Registrar(r.Proveedor.Id, r.Parametros, r.FechaHora, ahora, r.Silo, r.Observaciones, ticket++));
+                registradas.Add(RecepcionLeche.Registrar(r.Proveedor.Id, r.Parametros, r.FechaHora, ahora, r.Silo, r.Observaciones,
+                    creadoPorUsuarioId, null, HoraPlanta.AUtc(r.FechaHora), ticket++));
             }
 
             return new DatosDemo(proveedores, registradas);

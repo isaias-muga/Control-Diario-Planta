@@ -7,6 +7,7 @@ namespace DairyControl.Infrastructure.Tests
     public class DemoDataGeneratorTests
     {
         private static readonly DateTime Desde = new(2026, 4, 15);
+        private static readonly Guid AdminId = Guid.NewGuid();
 
         private static List<RecepcionLeche> Recepciones(DemoDataGenerator.DatosDemo datos) =>
             datos.Recepciones.OrderBy(r => r.FechaHora).ToList();
@@ -18,7 +19,7 @@ namespace DairyControl.Infrastructure.Tests
             var generator = new DemoDataGenerator();
 
             // Act
-            var recepciones = Recepciones(generator.Generar(Desde));
+            var recepciones = Recepciones(generator.Generar(Desde, AdminId));
 
             // Assert
             Assert.NotEmpty(recepciones);
@@ -34,7 +35,7 @@ namespace DairyControl.Infrastructure.Tests
             var generator = new DemoDataGenerator();
 
             // Act
-            var recepciones = Recepciones(generator.Generar(Desde));
+            var recepciones = Recepciones(generator.Generar(Desde, AdminId));
 
             // Assert
             var tickets = recepciones.Select(r => r.Ticket!.Value).ToList();
@@ -48,7 +49,7 @@ namespace DairyControl.Infrastructure.Tests
             var generator = new DemoDataGenerator();
 
             // Act
-            var agua = Recepciones(generator.Generar(Desde))
+            var agua = Recepciones(generator.Generar(Desde, AdminId))
                 .Select(r => r.Parametros.AguaPorcentaje)
                 .ToList();
 
@@ -67,10 +68,10 @@ namespace DairyControl.Infrastructure.Tests
         public void Generar_SameInput_IsDeterministic()
         {
             // Arrange
-            var primera = Recepciones(new DemoDataGenerator().Generar(Desde));
+            var primera = Recepciones(new DemoDataGenerator().Generar(Desde, AdminId));
 
             // Act
-            var segunda = Recepciones(new DemoDataGenerator().Generar(Desde));
+            var segunda = Recepciones(new DemoDataGenerator().Generar(Desde, AdminId));
 
             // Assert
             Assert.Equal(
@@ -85,7 +86,7 @@ namespace DairyControl.Infrastructure.Tests
             var generator = new DemoDataGenerator();
 
             // Act
-            var recepciones = Recepciones(generator.Generar(Desde));
+            var recepciones = Recepciones(generator.Generar(Desde, AdminId));
 
             // Assert
             Assert.NotEmpty(recepciones);

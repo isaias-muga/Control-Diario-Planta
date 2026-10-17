@@ -13,6 +13,7 @@ namespace DairyControl.Infrastructure.Tests
     public class DemoDataSeederTests : IDisposable
     {
         private readonly SqliteConnection _connection;
+        private readonly Guid _adminId;
 
         public DemoDataSeederTests()
         {
@@ -20,6 +21,7 @@ namespace DairyControl.Infrastructure.Tests
             _connection.Open();
             using var context = NuevoContexto();
             context.Database.EnsureCreated();
+            _adminId = UsuariosDePrueba.CrearAdmin(context);
         }
 
         public void Dispose() => _connection.Dispose();
@@ -62,9 +64,9 @@ namespace DairyControl.Infrastructure.Tests
         private void CargarDatosViejos()
         {
             using var context = NuevoContexto();
-            var viejo = Proveedor.Crear("Tambo Viejo");
+            var viejo = Proveedor.Crear("Tambo Viejo", _adminId);
             context.Proveedores.Add(viejo);
-            context.Recepciones.Add(RecepcionLeche.Registrar(viejo.Id, ParametrosCalidad.Create(null, 17m, 5m, 1000m), new DateTime(2026, 1, 1, 6, 0, 0), new DateTime(2026, 1, 2), 1, null, 1));
+            context.Recepciones.Add(RecepcionLeche.Registrar(viejo.Id, ParametrosCalidad.Create(null, 17m, 5m, 1000m), new DateTime(2026, 1, 1, 6, 0, 0), new DateTime(2026, 1, 2), 1, null, _adminId, null, new DateTime(2026, 1, 2), 1));
             context.ConfiguracionesCalidad.Single().CambiarLimites(LimitesCalidad.Create(25m, 30m, 5m), DateTime.UtcNow);
             context.SaveChanges();
         }
@@ -101,6 +103,43 @@ namespace DairyControl.Infrastructure.Tests
             Assert.NotEmpty(datos.Tickets);
             Assert.Equal(Enumerable.Range(4900, datos.Recepciones), datos.Tickets); // unique and consecutive
             Assert.Equal(LimitesCalidad.Predeterminados, datos.Limites);
+        }
+
+        [Fact]
+        public async Task InitializeAsync_ResetOn_KeepsTheUsersAndCreditsTheSeededRowsToTheAdmin()
+        {
+            // Arrange
+            using var context = NuevoContexto();
+            var seeder = new DemoDataSeeder(context, TimeProvider.System, new LoggerEnMemoria());
+
+            // Act
+            await seeder.InitializeAsync(resetOnStartup: true, seedOnStartup: false);
+
+            // Assert
+            using var lectura = NuevoContexto();
+            Assert.Equal(_adminId, lectura.Usuarios.AsNoTracking().Single().Id);
+            Assert.All(lectura.Proveedores.AsNoTracking().ToList(), p => Assert.Equal(_adminId, p.CreadoPorUsuarioId));
+            Assert.All(lectura.Recepciones.AsNoTracking().ToList(), r =>
+            {
+                Assert.Equal(_adminId, r.RegistradoPorUsuarioId);
+                Assert.Null(r.OperarioId);
+                Assert.NotNull(r.RegistradoEn);
+            });
+        }
+
+        [Fact]
+        public async Task SeedAsync_NoAdminInTheDatabase_FailsClearly()
+        {
+            // Arrange
+            using (var escritura = NuevoContexto())
+            {
+                escritura.Usuarios.ExecuteDelete();
+            }
+            using var context = NuevoContexto();
+            var seeder = new DemoDataSeeder(context, TimeProvider.System, new LoggerEnMemoria());
+
+            // Act & Assert
+            await Assert.ThrowsAsync<InvalidOperationException>(() => seeder.SeedAsync());
         }
 
         [Fact]

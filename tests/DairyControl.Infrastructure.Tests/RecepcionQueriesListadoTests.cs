@@ -14,6 +14,7 @@ namespace DairyControl.Infrastructure.Tests
         private static readonly DateTime Ahora = new(2026, 10, 20);
 
         private readonly SqliteConnection _connection;
+        private readonly Guid _adminId;
 
         public RecepcionQueriesListadoTests()
         {
@@ -21,6 +22,7 @@ namespace DairyControl.Infrastructure.Tests
             _connection.Open();
             using var context = NuevoContexto();
             context.Database.EnsureCreated();
+            _adminId = UsuariosDePrueba.CrearAdmin(context);
         }
 
         public void Dispose() => _connection.Dispose();
@@ -37,7 +39,7 @@ namespace DairyControl.Infrastructure.Tests
         private Proveedor AgregarProveedor(string nombre)
         {
             using var context = NuevoContexto();
-            var proveedor = Proveedor.Crear(nombre);
+            var proveedor = Proveedor.Crear(nombre, _adminId);
             context.Proveedores.Add(proveedor);
             context.SaveChanges();
             return proveedor;
@@ -55,7 +57,7 @@ namespace DairyControl.Infrastructure.Tests
         {
             using var context = NuevoContexto();
             context.Recepciones.Add(RecepcionLeche.Registrar(
-                proveedorId, ParametrosCalidad.Create(null, acidez, temperatura, litros, agua), fechaHora, Ahora, 1, observaciones, ticket));
+                proveedorId, ParametrosCalidad.Create(null, acidez, temperatura, litros, agua), fechaHora, Ahora, 1, observaciones, _adminId, null, Ahora, ticket));
             context.SaveChanges();
         }
 
