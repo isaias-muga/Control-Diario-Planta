@@ -32,7 +32,7 @@ namespace DairyControl.Application.Services
             if (actual is null)
                 return null;
 
-            actual.Configuracion.CambiarLimites(limites, _reloj.GetUtcNow().UtcDateTime);
+            actual.Configuracion.Actualizar(limites, dto.CantidadSilos, _reloj.GetUtcNow().UtcDateTime);
             var nuevaVersion = await _repository.UpdateAsync(actual.Configuracion, versionLeida);
             return ToDto(actual.Configuracion, nuevaVersion);
         }
@@ -55,6 +55,7 @@ namespace DairyControl.Application.Services
             AcidezMaxima = configuracion.Limites.AcidezMaxima,
             TemperaturaMaxima = configuracion.Limites.TemperaturaMaxima,
             AguaMaxima = configuracion.Limites.AguaMaxima,
+            CantidadSilos = configuracion.CantidadSilos,
             ActualizadoEn = configuracion.ActualizadoEn,
             Version = Convert.ToBase64String(version)
         };

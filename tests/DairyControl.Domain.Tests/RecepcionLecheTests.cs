@@ -144,16 +144,18 @@ namespace DairyControl.Domain.Tests
         }
 
         [Fact]
-        public void Registrar_NoSilo_SiloIsNull()
+        public void Registrar_NoSilo_ThrowsReglaDeNegocioExceptionOnSilo()
         {
             // Arrange
             var parametros = ParametrosCalidad.Create(null, 18m, 4m, 1000m);
 
             // Act
-            var recepcion = RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, null, null, UsuarioId, null, AhoraUtc);
+            var ex = Assert.Throws<ReglaDeNegocioException>(() =>
+                RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, null, null, UsuarioId, null, AhoraUtc));
 
             // Assert
-            Assert.Null(recepcion.Silo);
+            Assert.Equal("silo", ex.Campo);
+            Assert.Equal("El silo es obligatorio.", ex.Message);
         }
 
         [Theory]

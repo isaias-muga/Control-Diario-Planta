@@ -42,6 +42,7 @@ namespace DairyControl.Api.Tests
         public Mock<IOperarioRepository> Operarios { get; } = new();
         public Mock<IProveedorRepository> Proveedores { get; } = new();
         public Mock<IRecepcionRepository> Recepciones { get; } = new();
+        public Mock<IConfiguracionCalidadRepository> Configuracion { get; } = new();
 
         public FabricaDeApi()
         {
@@ -49,6 +50,9 @@ namespace DairyControl.Api.Tests
             Usuarios.Setup(u => u.GetAllAsync()).ReturnsAsync([]);
             Operarios.Setup(o => o.GetAllAsync()).ReturnsAsync([]);
             Proveedores.Setup(p => p.GetAllAsync()).ReturnsAsync([]);
+            // The plant has three silos, as a new database does
+            Configuracion.Setup(c => c.GetAsync()).ReturnsAsync(
+                new ConfiguracionLeida(ConfiguracionCalidad.Crear(Domain.ValueObjects.LimitesCalidad.Predeterminados, new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)), [1]));
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -62,7 +66,7 @@ namespace DairyControl.Api.Tests
                 Reemplazar(servicios, Recepciones.Object);
                 Reemplazar(servicios, new Mock<IProveedorQueries>().Object);
                 Reemplazar(servicios, new Mock<IRecepcionQueries>().Object);
-                Reemplazar(servicios, new Mock<IConfiguracionCalidadRepository>().Object);
+                Reemplazar(servicios, Configuracion.Object);
 
                 // /health asks the database: here there is none
                 servicios.PostConfigure<HealthCheckServiceOptions>(o => o.Registrations.Clear());

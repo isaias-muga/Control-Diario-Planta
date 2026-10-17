@@ -14,13 +14,15 @@ namespace DairyControl.Application.Services
         private readonly IProveedorRepository _proveedores;
         private readonly IRecepcionRepository _recepciones;
         private readonly IProveedorQueries _queries;
+        private readonly IConfiguracionCalidadRepository _configuracion;
         private readonly IUsuarioActual _actual;
         private readonly VerificacionPinService _pin;
         private readonly TimeProvider _reloj;
 
         public ProveedorAppService(IProveedorRepository proveedores, IRecepcionRepository recepciones, IProveedorQueries queries,
-            IUsuarioActual actual, VerificacionPinService pin, TimeProvider reloj)
+            IConfiguracionCalidadRepository configuracion, IUsuarioActual actual, VerificacionPinService pin, TimeProvider reloj)
         {
+            _configuracion = configuracion;
             _actual = actual;
             _pin = pin;
             _proveedores = proveedores;
@@ -62,6 +64,11 @@ namespace DairyControl.Application.Services
             // The audit data comes from the token and the PIN, never from the request body
             var usuarioId = UsuarioActualId();
             var operario = await _pin.ResolverAsync(dto.Pin);
+
+            // The silo must exist in this plant: its number of silos is data, read now (history is never re-checked)
+            var configuracion = await _configuracion.GetAsync()
+                ?? throw new InvalidOperationException("Falta la configuración de la planta.");
+            configuracion.Configuracion.ValidarSilo(dto.Silo);
 
             var parametros = ParametrosCalidad.Create(dto.Grasa, dto.Acidez, dto.Temperatura, dto.Litros, dto.AguaPorcentaje);
 

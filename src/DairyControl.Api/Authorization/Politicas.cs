@@ -12,7 +12,7 @@ namespace DairyControl.Api.Authorization
         /// <summary>What the reception phone may also read: the proveedor options, the next ticket and the quality limits.</summary>
         public const string LecturaCarga = "LecturaCarga";
 
-        /// <summary>Register a recepción: Admin, or the reception phone (with an operario PIN).</summary>
+        /// <summary>Register a recepción: the office clerk (Oficina) records the plant lab measurement, Admin too, and the reception phone with an operario PIN.</summary>
         public const string Registro = "Registro";
 
         /// <summary>Everything that changes data other than registering a recepción, and the users and operarios.</summary>

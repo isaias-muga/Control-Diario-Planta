@@ -58,7 +58,11 @@ namespace DairyControl.Domain.Entities
             {
                 throw new ReglaDeNegocioException("El número de ticket debe ser un entero positivo.", nameof(ticket));
             }
-            if (silo != null && (silo < SiloMin || silo > SiloMax))
+            if (silo is null)
+            {
+                throw new ReglaDeNegocioException("El silo es obligatorio.", nameof(silo));
+            }
+            if (silo < SiloMin || silo > SiloMax)
             {
                 throw new ReglaDeNegocioException($"El silo debe estar entre {SiloMin} y {SiloMax}.", nameof(silo));
             }
