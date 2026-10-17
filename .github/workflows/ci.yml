@@ -68,6 +68,7 @@ jobs:
             echo "MSSQL_SA_PASSWORD=Ci_$(openssl rand -hex 12)_aA1"
             echo "JWT_SIGNING_KEY=$(openssl rand -hex 32)"
             echo "ADMIN_PASSWORD=$(openssl rand -hex 16)"
+            echo "PIN_SECRET=$(openssl rand -hex 32)"
           } > .env
 
       - name: Start the stack

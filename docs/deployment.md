@@ -54,7 +54,8 @@ The tables are not created by hand: the API applies the EF Core migrations and s
    | ---------------- | --------------------------------------------------------------------------- |
    | `db-connection`  | ADO.NET connection string (SQL authentication) with `Connection Timeout=60` |
    | `jwt-key`        | Random signing key, at least 32 characters                                  |
-   | `admin-password` | Password of the demo `admin` user                                           |
+   | `admin-password` | Password of the first `admin` (only used to create it when there are no users) |
+   | `pin-secret`     | Random key for the operario PINs, at least 32 characters; changing it invalidates every PIN |
 
 3. Set the API's **environment variables**:
 
@@ -63,12 +64,15 @@ The tables are not created by hand: the API applies the EF Core migrations and s
    | `ConnectionStrings__Default`         | secret `db-connection`         |
    | `Jwt__SigningKey`                    | secret `jwt-key`               |
    | `AdminUser__Password`                | secret `admin-password`        |
+   | `Pin__Secret`                        | secret `pin-secret`            |
    | `Database__ApplyMigrationsOnStartup` | `true`                         |
    | `DemoData__SeedOnStartup`            | `true`                         |
    | `DemoData__ResetOnStartup`           | `true`                         |
    | `HttpsRedirection__Enabled`          | `false` (Azure terminates TLS) |
 
-   `DemoData__ResetOnStartup` wipes all proveedores and recepciones, restores the default quality limits and reseeds the demo data every time the API starts: every cold start after scaling to zero, but also every deploy of a new revision and every container restart, so someone using the demo during a deploy can lose their data. Use it only in the demo environment; the admin user is not touched.
+   `DemoData__ResetOnStartup` wipes all proveedores and recepciones, restores the default quality limits and reseeds the demo data every time the API starts: every cold start after scaling to zero, but also every deploy of a new revision and every container restart, so someone using the demo during a deploy can lose their data. Use it only in the demo environment; users and operarios are not touched (the demo rows are credited to the first admin).
+
+   The API reads the client address from `X-Forwarded-For` to rate-limit logins per address, trusting only the last hop (`Proxy__ForwardLimit`, default `1`) and only from private networks (`Proxy__KnownNetworks`, default the private ranges). The client app's nginx appends the address it sees, so one hop is right when it reaches the API directly. If a second proxy sits in between (for example the internal ingress of the API app), check in the logs that clients are not all seen with the same address and raise `Proxy__ForwardLimit` to `2`.
 
 4. Create the **client app** in the same environment:
    - Image: `ghcr.io/isaias-muga/dairycontrol-client:<tag>`.

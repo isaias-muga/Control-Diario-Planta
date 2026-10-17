@@ -28,6 +28,7 @@ services:
       ConnectionStrings__Default: Server=db;Database=DairyControl;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}
       AdminUser__Password: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      Pin__Secret: ${PIN_SECRET:?Set PIN_SECRET in .env}
       Database__ApplyMigrationsOnStartup: "true"
       HttpsRedirection__Enabled: "false"
       DemoData__SeedOnStartup: "true"
