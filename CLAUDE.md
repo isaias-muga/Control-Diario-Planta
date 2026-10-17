@@ -27,6 +27,16 @@ Milk reception and quality-control system for a dairy plant. Backend: .NET 10, A
 - Services are registered in `AddApplication()` (Application) and `AddInfrastructure(connectionString)` (Infrastructure), called from `Program.cs`; options, authentication, CORS and health checks stay in `Program.cs`.
 - These rules are enforced by `tests/DairyControl.ArchitectureTests`: a change that breaks one fails the build.
 
+## Roles and users
+
+- Complexity grows with the role. The reception phone (role `Recepcion`) has one button and a PIN; the office (`Oficina`) reads everything and changes nothing; `Admin` also changes data and manages users and operarios. Do not add screens or options to a role that does not need them.
+- Each record is created where the fact happens: whoever registers a recepción or creates a proveedor is stamped on it by the server, from the validated token (and, for the reception phone, the operario that the PIN identifies). The client never sends who did it.
+- Permissions are enforced on the server. The client hides what a role may not do (guards, buttons) to save clicks, but the API refuses it anyway; a new endpoint is never protected only by the client.
+- `Usuario` (username, nombre, `RolUsuario`, activo, password hash, security stamp) and `Operario` (nombre, activo, PIN hash) are aggregate roots with their own repositories. A password is never stored or logged: only its PBKDF2 hash (ASP.NET Core Identity's `PasswordHasher`, nothing else of Identity). A PIN is stored as HMAC-SHA256 keyed with `Pin:Secret`, never in plain text; rotating `Pin:Secret` invalidates every stored PIN and the admin must set them again.
+- A user created or reset by an admin has `DebeCambiarPassword`: the server answers 403 `{ "code": "debeCambiarPassword" }` to everything except `POST /api/Auth/cambiar-password` until the user chooses a password of their own (the bootstrap admin, whose password is a deployment secret, is not forced). Operator-chosen PINs do not exist yet: the admin sets each PIN.
+- The token carries the user id, role and security stamp. On every request the API checks that the user exists, is active and has the same stamp, so deactivating a user, changing or resetting a password or changing a role ends their sessions at once. Sessions last 7 days for `Recepcion` and 12 hours for the others (`Jwt:RecepcionDias`, `Jwt:PersonalHoras`); the client renews the token (`POST /api/Auth/renovar`) after half of its life.
+- Login is limited per client address (`RateLimit:LoginPorMinuto`, default 30 per minute, answer 429), and a user is locked for 15 minutes after 5 wrong passwords (the answer is the same 401 as a wrong password or an unknown user, which also takes the same work). Five wrong PINs from the same user within 10 minutes block PIN checks for 5 minutes (429). An attempt (login or PIN) is counted BEFORE it is checked, through `IUsuarioRepository.ModificarAsync` (the `Usuario` row has a version and the change is retried on top of a concurrent save), so parallel guesses cannot all be checked against the same count; a right PIN gives back only its own attempt and a right password clears the login count. The client address is read from `X-Forwarded-For` trusting only the last hop of a private network (`Proxy:ForwardLimit`, `Proxy:KnownNetworks`).
+
 ## Naming
 
 - Domain concepts stay in Spanish, matching the existing code: `Proveedor`, `RecepcionLeche`, `ParametrosCalidad`, `Crear`, `Registrar`.
@@ -47,6 +57,7 @@ Milk reception and quality-control system for a dairy plant. Backend: .NET 10, A
 - Limits (max lengths, decimal precision/scale) are `public const` fields on the type that owns them, and the EF Core mapping reuses those constants.
 - Plausible ranges reject typing errors and are validated in the domain (`ParametrosCalidad`, `RecepcionLeche`) and mirrored in `client/src/app/models/limits.ts`: litros 0.001-30000 (positive; the column keeps 3 decimals), grasa 1-10 %, acidez 10-30 °D, temperatura 0-45 °C, agua 0-100 %, silo 1-20. They are different from the quality limits (`LimitesCalidad`): a plausible value outside the quality limits is accepted and flagged as out of range; an impossible value is rejected with a clear message.
 - IDs are `Guid`s generated in the domain with `Guid.NewGuid()`.
+- Audit columns: `RecepcionLeche` has `RegistradoPorUsuarioId`, `OperarioId` (null when no PIN was involved) and `RegistradoEn`; `Proveedor` has `CreadoPorUsuarioId`. They reference `Usuario`/`Operario` by id (never a navigation to another aggregate) and rows from before users existed keep them null. `RegistradoEn` is a UTC audit timestamp from the `TimeProvider`; `FechaHora` (the time of the delivery) stays in plant time.
 - Use `= null!` only for properties that EF Core populates; never as a general way to silence nullable warnings.
 
 ## Application conventions
@@ -76,19 +87,19 @@ Milk reception and quality-control system for a dairy plant. Backend: .NET 10, A
 
 - Controllers are thin: call one service method and translate the result to an HTTP response. No business logic.
 - Every controller has `[ApiController]` and `[Route("api/[controller]")]`.
-- Every controller except `AuthController` has `[Authorize]` at class level: every endpoint requires a JWT, including reads. `/health` and `AuthController` are the only anonymous endpoints; a new anonymous endpoint needs an explicit decision in the plan.
+- Every action names its policy with `[Authorize(Policy = Politicas.X)]` (`Lectura` = Admin or Oficina, which is also the default and the fallback; `LecturaCarga` adds Recepcion for the proveedor options, the next ticket and the quality limits; `Registro` = Admin or Recepcion, to register a recepción; `Administracion` = Admin; `Autenticado`; `CambioPassword`). There is no class-level `[Authorize]` (it would be combined with the action's policy). The only anonymous endpoints are `AuthController.Login` and `/health`; a new anonymous endpoint needs an explicit decision in the plan. A new endpoint is added to the authorization matrix test (`AutorizacionTests` in `DairyControl.Api.Tests`: endpoint x role).
 - For 201 responses, use a named route plus `CreatedAtRoute` (ASP.NET Core strips the `Async` suffix from action names, so `CreatedAtAction(nameof(...))` fails).
-- `ExceptionHandlingMiddleware` maps `ReglaDeNegocioException` to 400 `{ "error": "...", "field": "..." }` (`field` only when there is a `campo`), `TicketDuplicadoException` (the plant ticket is unique across all proveedores) and `ConflictoDeConcurrenciaException` to 409 `{ "error": "..." }`, and every other exception (including `ArgumentException` and `ArgumentNullException`: those are bugs) to a logged 500 `{ "error": "Ocurrió un error inesperado.", "traceId": "..." }`. Model-binding errors keep their own 400 path (`ApiErrors`). Do not catch domain exceptions in controllers.
-- Every unexpected error is logged: the middleware logs each 500 at Error level with the exception, the request method and path (not the query string) and the trace id, and never request bodies, passwords or tokens. Do not add a `catch` that swallows an exception; if a `catch` is needed, log it (the one deliberate exception, a request aborted by the client, is logged at Debug). Every controller except `AuthController` having `[Authorize]` is checked by an architecture test.
-- Pipeline order matters: exception middleware first, then HTTPS redirection, CORS, `UseAuthentication`, `UseAuthorization`, `MapControllers`.
+- `ExceptionHandlingMiddleware` maps `ReglaDeNegocioException` to 400 `{ "error": "...", "field": "..." }` (`field` only when there is a `campo`), `TicketDuplicadoException` (the plant ticket is unique across all proveedores), `ConflictoDeUnicidadException` (a username or an active operario PIN already taken) and `ConflictoDeConcurrenciaException` to 409 `{ "error": "..." }`, `DemasiadosIntentosException` (PIN lockout) to 429 `{ "error": "..." }`, and every other exception (including `ArgumentException` and `ArgumentNullException`: those are bugs) to a logged 500 `{ "error": "Ocurrió un error inesperado.", "traceId": "..." }`. Model-binding errors keep their own 400 path (`ApiErrors`). Do not catch domain exceptions in controllers.
+- Every unexpected error is logged: the middleware logs each 500 at Error level with the exception, the request method and path (not the query string) and the trace id, and never request bodies, passwords or tokens. Do not add a `catch` that swallows an exception; if a `catch` is needed, log it (the one deliberate exception, a request aborted by the client, is logged at Debug). Every action naming an explicit policy, and `Login` and `/health` being the only anonymous endpoints, are checked by architecture tests.
+- Pipeline order matters: `UseForwardedHeaders` first (the client address for the rate limiter), then the exception middleware, HTTPS redirection, CORS, `UseRateLimiter`, `UseAuthentication`, `UseAuthorization`, `MapControllers`.
 
 ## Client conventions
 
 - Standalone components only (no NgModules). Use signals for component state and the built-in control flow (`@if`, `@for`, `@empty`).
 - Folders under `client/src/app`:
-  - `pages/`: routed components (`login`, `resumen`, `recepciones`, `proveedores-list`, `proveedor-detail`, `configuracion`, `carga-rapida`)
+  - `pages/`: routed components (`login`, `resumen`, `recepciones`, `proveedores-list`, `proveedor-detail`, `configuracion`, `carga-rapida`, `inicio`, `cambiar-password`, `usuarios`)
   - `components/`: reusable components and dialogs (`recepcion-form`, `registrar-recepcion-dialog`, `confirmar-descarte-dialog`, `crear-proveedor-dialog`, `numero-input` (the `appNumero` directive), `observacion-celda`, `observaciones-dialog`, `recepciones-filtros`, `recepciones-list`, `recepciones-panel`)
-  - `services/`: the only place that uses `HttpClient` (`ProveedoresService`, `RecepcionesService`, `ConfiguracionService`, `AuthService`)
+  - `services/`: the only place that uses `HttpClient` (`ProveedoresService`, `RecepcionesService`, `ConfiguracionService`, `AuthService`, `UsuariosService`)
   - `models/`: TypeScript interfaces mirroring the API DTOs, plus `limits.ts`
   - `guards/`, `interceptors/`, `utils/`
 - Components get dependencies with `inject()`. Components never call `HttpClient` directly.
@@ -98,7 +109,7 @@ Milk reception and quality-control system for a dairy plant. Backend: .NET 10, A
 - Forms are reactive forms. Client validation mirrors the domain limits in `models/limits.ts`; it exists for user feedback only, and the API remains the source of truth.
 - The registration form may preview the quality limits for UX (the limit values are read from the API, never hardcoded) and the real liters (`litrosReales` in `utils/calidad.ts`); the domain and the API remain the source of truth, and lists and totals show the server values.
 - API errors are turned into user messages with `getApiErrorMessage` in `utils/api-error.ts`.
-- Authentication: only `AuthService` reads or writes the token. `authInterceptor` adds the `Authorization` header; never add it manually. Protected routes use `authGuard`.
+- Authentication: only `AuthService` reads or writes the token and exposes the role (signals `rol`, `esAdmin`, `esRecepcion`, `inicio`). `authInterceptor` adds the `Authorization` header (never add it manually), sends a 401 to the login page and a 403 `debeCambiarPassword` to `/cambiar-password`. Routes use `roleGuard(...roles)`; each role starts at its own page (`/inicio` for the reception phone, `/resumen` for the rest) and an unknown address goes there. The client only hides what a role may not do; the API decides. The reception phone has no toolbar, tabs, settings or logout. The client never keeps a PIN after a send and shows it masked with a numeric keyboard.
 - `slowRequestInterceptor` and `ServerStatusService` show the global "waking up" banner when any request takes more than 3 seconds; pages don't add their own cold-start messages.
 - The API base URL comes from `environments/`; never hardcode it.
 - User-facing text is in Spanish.
@@ -116,6 +127,7 @@ Milk reception and quality-control system for a dairy plant. Backend: .NET 10, A
   - Cells: single line; long text is truncated with an ellipsis and its full text in a `matTooltip`. Text that matters but does not fit (observaciones) is a real button (keyboard accessible, with a "ver más" affordance only when it is truncated) that opens a dialog with the full text and its context.
   - Alignment and padding: headers and cells are vertically centered with the same vertical padding; the first and last cells have the same horizontal padding, so text never touches a border or the card edge; quantities (liters, percentages, measurements) are right-aligned, identifiers (ticket, silo, codes) are centered and text is left-aligned; each header is aligned like its column.
 - Visual check: for any UI change, before reporting back, run the app and take Playwright screenshots of every changed page at 1366px and 390px wide. Check them yourself (no clipped or truncated text, no unexpected scroll, nothing touching the edges, consistent alignment), fix what is wrong, and include the screenshots in your report (in a PR, see PR evidence in the Git workflow). Launch Chromium with `ignoreDefaultArgs: ['--hide-scrollbars']`, otherwise scrollbars are invisible in the screenshots.
+- A control that needs data from the API to work (the options of a select, a suggestion) is not offered until the data is there: show a disabled "Cargando…" placeholder, never an empty control. An empty `mat-select` ignores the tap without any error, so a tap on a slow connection (or a click in a fast test) does nothing and nobody knows why. (Root cause of the e2e failure of PR #4: the quick flow's proveedor select.)
 
 ## Testing
 
@@ -131,15 +143,17 @@ Milk reception and quality-control system for a dairy plant. Backend: .NET 10, A
 
 ### Architecture tests
 
-- `tests/DairyControl.ArchitectureTests` (NetArchTest.Rules, reflection and a scan of the `src` sources) fails the build when a rule of this file is broken: Domain references only the BCL; Application does not use Infrastructure, EF Core or ASP.NET Core; Infrastructure does not use Api; controllers do not use `AppDbContext` or the repositories; entities have no public setters; value objects have no setters; every exception in `DairyControl.Domain.Exceptions` derives from `ExcepcionDeDominio`; no `new ArgumentException` or `ArgumentException.ThrowIf...` anywhere in `src` (`ArgumentNullException` is allowed); every controller except `AuthController` has `[Authorize]` and none has `[AllowAnonymous]`; no direct clock reads in `src`.
+- `tests/DairyControl.ArchitectureTests` (NetArchTest.Rules, reflection and a scan of the `src` sources) fails the build when a rule of this file is broken: Domain references only the BCL; Application does not use Infrastructure, EF Core or ASP.NET Core; Infrastructure does not use Api; controllers do not use `AppDbContext` or the repositories; entities have no public setters; value objects have no setters; every exception in `DairyControl.Domain.Exceptions` derives from `ExcepcionDeDominio`; no `new ArgumentException` or `ArgumentException.ThrowIf...` anywhere in `src` (`ArgumentNullException` is allowed); every controller action names an explicit policy of `Politicas` (or is `Login`), no controller has a class-level `[Authorize]`, the only `[AllowAnonymous]` action is `AuthController.LoginAsync` and the only `.AllowAnonymous()` mapping is `/health`; no direct clock reads in `src`.
 - When a rule of this file can be checked by a test, add the test in the same PR that adds the rule.
 
 ### E2E tests
 
 - `e2e/` holds Playwright tests (TypeScript) that run against the Docker Compose stack, in the CI job `e2e` (required check). `global-setup.ts` waits for `GET /health` (anonymous, 200 when the API and the database are reachable); never use fixed sleeps.
-- Each test creates its own proveedor and a unique ticket through the UI, so tests depend neither on each other nor on the seed. Tests that change the global quality limits restore them in `finally`; that is why they run with one worker.
+- Each test creates its own proveedor and a unique ticket through the UI, so tests depend neither on each other nor on the seed. A test of a role creates its own user (and operario with a free PIN) through the admin API (`crearUsuarioListoPorApi`, `crearOperarioPorApi`); the compose stack raises the login limit for the suite. Tests that change the global quality limits restore them in `finally`; that is why they run with one worker.
 - Selectors are roles and labels (`getByRole`, `getByLabel`), never CSS classes.
 - A new critical flow gets an e2e test in the same PR.
+- CI is several times slower than a developer machine, and the first request after the API starts is the slowest. A test never acts on a control the instant a page opens: it waits for the control to be ready with a web-first assertion (`toBeEnabled`, `toBeVisible`, or a role that only exists once the data is loaded). A race like that passes locally by luck, so `e2e/fixtures.ts` delays every `/api` response when `E2E_API_LATENCY_MS` is set, and CI runs the specs of the flows that load data when they open (`carga-rapida`, `roles`) a second time with `E2E_API_LATENCY_MS=400`. Run the same command locally before a PR that adds or changes such a flow or a form that loads its own options, and put new flows of that kind in the list in `ci.yml`.
+- When the `e2e` check fails, read the evidence before changing anything: `gh run view <run> --log-failed` for the test error, the `playwright-report` artifact (error context and trace network log) for the page state and request timings, and the filtered API warnings that CI prints before the full compose logs.
 
 ### Exploratory checks
 
@@ -160,7 +174,7 @@ Fix small findings in the same PR. For anything bigger, propose a separate issue
 
 ## Security
 
-- Secrets live in .NET User Secrets: `Jwt:SigningKey` and `AdminUser:Password`. Never write a secret into `appsettings.json` or any committed file.
+- Secrets live in .NET User Secrets: `Jwt:SigningKey`, `Pin:Secret` (at least 32 characters; the API does not start without it) and `AdminUser:Password` (only used to create the first Admin when there are no users). Never write a secret into `appsettings.json` or any committed file. The client build contains no credential.
 - Compare secrets with `CryptographicOperations.FixedTimeEquals`, not `==`.
 
 ## Commands (run from the repo root unless noted)
@@ -179,11 +193,11 @@ Fix small findings in the same PR. For anything bigger, propose a separate issue
 
 ### Docker / configuration flags
 
-- The compose stack is configured only through environment variables in `.env` (`ConnectionStrings__Default`, `Jwt__SigningKey`, `AdminUser__Password`), not User Secrets. Local development keeps using LocalDB and User Secrets.
+- The compose stack is configured only through environment variables in `.env` (`ConnectionStrings__Default`, `Jwt__SigningKey`, `AdminUser__Password`, `Pin__Secret`), not User Secrets. Local development keeps using LocalDB and User Secrets.
 - `Database:ApplyMigrationsOnStartup` (default `false`): when `true`, the API runs `Database.Migrate()` at startup. Enabled only in `compose.yaml`.
 - `HttpsRedirection:Enabled` (default `true`): when `false`, `UseHttpsRedirection` is skipped. Set to `false` only in `compose.yaml`, where the API listens on plain HTTP behind nginx.
 - `DemoData:SeedOnStartup` (default `false`): when `true` and the database has no proveedores, `DemoDataSeeder` creates demo data at startup. Enabled only in `compose.yaml`.
-- `DemoData:ResetOnStartup` (default `false`): when `true`, at startup (after migrations, before seeding) the API deletes all recepciones and proveedores, restores the default quality limits (`LimitesCalidad.Predeterminados`) and reseeds the demo data, in one transaction inside the execution strategy; it logs a warning with the deleted counts and never touches the admin user. It reseeds even if `SeedOnStartup` is `false`. It runs on every API start (cold start, new revision, restart), not only after scaling to zero. Only for the demo environment (Azure); not enabled in `compose.yaml`.
+- `DemoData:ResetOnStartup` (default `false`): when `true`, at startup (after migrations, before seeding) the API deletes all recepciones and proveedores, restores the default quality limits (`LimitesCalidad.Predeterminados`) and reseeds the demo data, in one transaction inside the execution strategy; it logs a warning with the deleted counts and never touches users or operarios (the demo rows are credited to the first admin). It reseeds even if `SeedOnStartup` is `false`. It runs on every API start (cold start, new revision, restart), not only after scaling to zero. Only for the demo environment (Azure); not enabled in `compose.yaml`.
 - `API_UPSTREAM` (client image, default `http://api:8080`): where nginx proxies `/api`. `client/nginx.conf.template` is filled from environment variables when the container starts. On Azure it points to the API's internal ingress.
 
 ## How to work in this repo
@@ -192,7 +206,7 @@ Fix small findings in the same PR. For anything bigger, propose a separate issue
 - Keep changes scoped to the task. Do not refactor unrelated code. If a new file is needed, justify it in the plan.
 - After making changes, run the build and the tests (and `ng build` for client changes), and report the results.
 - For UI changes, also do the visual check described in Client conventions > UI conventions.
-- Before every PR, run the Exploratory checks (Testing > Exploratory checks) and the e2e tests locally.
+- Before every PR, run the Exploratory checks (Testing > Exploratory checks) and the e2e tests locally on a fresh stack (`docker compose down -v && docker compose up --build -d`), including the slow-API run (see E2E tests) when the change touches a flow that loads data when it opens.
 - If a request conflicts with a rule in this file, stop and ask.
 - Every bug that escapes to `main` gets a regression test and, when it is a class of error (it could happen again elsewhere), a rule in this file or an architecture test, in the same PR as the fix.
 - Run the architecture review (`docs/architecture-review.md`) every 5 merged PRs and before any freeze or release: a fresh subagent reviews `main` with that checklist and this file, ranks the findings by severity and proposes issues (do not open them without approval). Every recurring class of finding becomes an architecture test or a rule here. Record each review in `docs/reviews/<yyyy-mm-dd>.md`.

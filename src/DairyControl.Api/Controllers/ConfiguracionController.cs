@@ -1,3 +1,4 @@
+using DairyControl.Api.Authorization;
 using DairyControl.Application.DTOs;
 using DairyControl.Application.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -7,7 +8,6 @@ namespace DairyControl.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
     public class ConfiguracionController : ControllerBase
     {
         private readonly ConfiguracionCalidadAppService _service;
@@ -18,6 +18,7 @@ namespace DairyControl.Api.Controllers
         }
 
         [HttpGet("calidad")]
+        [Authorize(Policy = Politicas.LecturaCarga)]
         public async Task<ActionResult<LimitesCalidadDto>> GetCalidadAsync()
         {
             var limites = await _service.GetAsync();
@@ -28,6 +29,7 @@ namespace DairyControl.Api.Controllers
         }
 
         [HttpPut("calidad")]
+        [Authorize(Policy = Politicas.Administracion)]
         public async Task<ActionResult<LimitesCalidadDto>> ActualizarCalidadAsync([FromBody] ActualizarLimitesCalidadDto dto)
         {
             var limites = await _service.ActualizarAsync(dto);

@@ -29,7 +29,11 @@ namespace DairyControl.Api.Middleware
             {
                 await Escribir(context, StatusCodes.Status400BadRequest, ApiErrors.Body(ex.Message, ex.Campo));
             }
-            catch (Exception ex) when (ex is TicketDuplicadoException or ConflictoDeConcurrenciaException)
+            catch (DemasiadosIntentosException ex)
+            {
+                await Escribir(context, StatusCodes.Status429TooManyRequests, ApiErrors.Body(ex.Message));
+            }
+            catch (Exception ex) when (ex is TicketDuplicadoException or ConflictoDeConcurrenciaException or ConflictoDeUnicidadException)
             {
                 await Escribir(context, StatusCodes.Status409Conflict, ApiErrors.Body(ex.Message));
             }

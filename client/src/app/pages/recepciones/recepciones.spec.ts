@@ -1,4 +1,5 @@
 import { LOCALE_ID } from '@angular/core';
+import { cerrarSesionDePrueba, iniciarSesionDePrueba } from '../../testing/sesion';
 import { registerLocaleData } from '@angular/common';
 import localeEsAr from '@angular/common/locales/es-AR';
 import { TestBed } from '@angular/core/testing';
@@ -32,6 +33,7 @@ describe('Recepciones page', () => {
   let harness: RouterTestingHarness;
 
   beforeEach(() => {
+    iniciarSesionDePrueba('Admin');
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
@@ -46,6 +48,7 @@ describe('Recepciones page', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     http.verify();
+    cerrarSesionDePrueba();
   });
 
   async function abrir(url = '/'): Promise<void> {
@@ -120,5 +123,27 @@ describe('Recepciones page', () => {
     (el().querySelector('.encabezado button') as HTMLButtonElement).click();
 
     http.expectNone((r) => r.url.endsWith('/Recepciones'));
+  });
+
+  it('offers the registration buttons to an admin', async () => {
+    await abrir();
+
+    expect(Array.from(el().querySelectorAll('.encabezado button, .encabezado a')).map((b) => b.textContent?.trim())).toEqual(['Carga rápida', '+ Registrar recepción']);
+  });
+
+  it('offers no registration to the office (read only), but still lists', async () => {
+    TestBed.resetTestingModule();
+    cerrarSesionDePrueba();
+    iniciarSesionDePrueba('Oficina');
+    TestBed.configureTestingModule({
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: LOCALE_ID, useValue: 'es-AR' }],
+    });
+    http = TestBed.inject(HttpTestingController);
+
+    await abrir();
+
+    expect(el().querySelector('.encabezado button')).toBeNull();
+    expect(el().querySelector('.encabezado a')).toBeNull();
+    expect(texto('h2')).toBe('Recepciones');
   });
 });

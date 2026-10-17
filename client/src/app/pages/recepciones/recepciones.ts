@@ -4,6 +4,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { RouterLink } from '@angular/router';
 import { Proveedor } from '../../models/proveedor';
 import { FiltroRecepciones } from '../../models/recepcion-listado';
+import { AuthService } from '../../services/auth';
 import { ProveedoresService } from '../../services/proveedores';
 import { RecepcionesPanel } from '../../components/recepciones-panel/recepciones-panel';
 import { RegistrarRecepcionDialog } from '../../components/registrar-recepcion-dialog/registrar-recepcion-dialog';
@@ -16,6 +17,7 @@ import { formatearFecha } from '../../utils/periodos';
   styleUrl: './recepciones.css',
 })
 export class Recepciones {
+  protected auth = inject(AuthService);
   private dialog = inject(MatDialog);
   private proveedoresService = inject(ProveedoresService);
 

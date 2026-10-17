@@ -41,7 +41,8 @@ body {
 
 .page:has(app-resumen),
 .page:has(app-recepciones),
-.page:has(app-proveedor-detail) {
+.page:has(app-proveedor-detail),
+.page:has(app-usuarios) {
   max-width: 1280px; /* the dashboard needs more room than the other pages */
 }
 

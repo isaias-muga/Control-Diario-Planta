@@ -1,3 +1,4 @@
+using DairyControl.Api.Authorization;
 using DairyControl.Application.DTOs;
 using DairyControl.Application.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -8,7 +9,6 @@ namespace DairyControl.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
     public class RecepcionesController : ControllerBase
     {
         private readonly ResumenRecepcionesAppService _service;
@@ -21,6 +21,7 @@ namespace DairyControl.Api.Controllers
         }
 
         [HttpGet]
+        [Authorize(Policy = Politicas.Lectura)]
         public async Task<ActionResult<ListadoRecepcionesDto>> GetListadoAsync(
             [FromQuery, BindRequired] DateOnly desde,
             [FromQuery, BindRequired] DateOnly hasta,
@@ -42,6 +43,7 @@ namespace DairyControl.Api.Controllers
         }
 
         [HttpGet("siguiente-ticket")]
+        [Authorize(Policy = Politicas.LecturaCarga)]
         public async Task<ActionResult<SiguienteTicketDto>> GetSiguienteTicketAsync()
         {
             var ticket = await _listadoService.GetSiguienteTicketAsync();
@@ -49,6 +51,7 @@ namespace DairyControl.Api.Controllers
         }
 
         [HttpGet("resumen")]
+        [Authorize(Policy = Politicas.Lectura)]
         public async Task<ActionResult<ResumenRecepcionesDto>> GetResumenAsync(
             [FromQuery, BindRequired] DateOnly desde,
             [FromQuery, BindRequired] DateOnly hasta,

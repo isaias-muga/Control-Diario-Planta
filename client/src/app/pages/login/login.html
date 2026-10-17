@@ -6,23 +6,8 @@
 
     <mat-card-content>
       <p class="description">
-        Demo de un sistema de recepción y control de calidad de leche para una planta láctea.
+        Recepción y control de calidad de leche.
       </p>
-
-      @if (demoCredentials; as creds) {
-        <div class="demo-credentials">
-          <p>
-            Usuario: <strong>{{ creds.username }}</strong>
-          </p>
-          <p>
-            Contraseña: <strong>{{ creds.password }}</strong>
-          </p>
-          <button mat-stroked-button type="button" (click)="useDemoCredentials()">
-            Usar credenciales de demo
-          </button>
-          <p class="demo-note">Demo: los datos se restablecen automáticamente.</p>
-        </div>
-      }
 
       <form [formGroup]="form" (ngSubmit)="submit()">
         <mat-form-field appearance="outline" class="full-width">

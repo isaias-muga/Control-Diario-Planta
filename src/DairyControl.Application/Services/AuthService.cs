@@ -1,56 +1,184 @@
-﻿using DairyControl.Application.DTOs;
+using DairyControl.Application.DTOs;
+using DairyControl.Application.Seguridad;
 using DairyControl.Application.Settings;
+using DairyControl.Domain.Entities;
+using DairyControl.Domain.Enums;
+using DairyControl.Domain.Exceptions;
+using DairyControl.Domain.Interfaces;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Text;
 
 namespace DairyControl.Application.Services
 {
+    /// <summary>The state of a valid session, as the API needs it to authorize a request.</summary>
+    public sealed record SesionValida(bool DebeCambiarPassword);
+
     public class AuthService
     {
+        public const string ClaimRol = "role";
+        public const string ClaimSello = "stamp";
+        public const string ClaimNombre = "name";
+        public const string ClaimDebeCambiarPassword = "dcp";
+
+        // A hash to verify against when the user does not exist or is not active, so a login takes about the same time either way.
+        private static string? _hashDeRelleno;
+
         private readonly IOptions<JwtSettings> _jwtSettings;
-        private readonly IOptions<AdminUserSettings> _adminUserSettings;
+        private readonly IUsuarioRepository _usuarios;
+        private readonly IHasherDePassword _hasher;
+        private readonly IUsuarioActual _actual;
         private readonly TimeProvider _reloj;
 
-        public AuthService(IOptions<JwtSettings> jwtSettings, IOptions<AdminUserSettings> adminUserSettings, TimeProvider reloj)
+        public AuthService(IOptions<JwtSettings> jwtSettings, IUsuarioRepository usuarios, IHasherDePassword hasher, IUsuarioActual actual, TimeProvider reloj)
         {
             _jwtSettings = jwtSettings;
-            _adminUserSettings = adminUserSettings;
+            _usuarios = usuarios;
+            _hasher = hasher;
+            _actual = actual;
             _reloj = reloj;
         }
 
-        public string? Login(LoginDto dto)
+        /// <summary>Returns the session token, or null when the credentials are wrong. A locked user and an unknown user look the same.</summary>
+        public async Task<LoginResultadoDto?> LoginAsync(LoginDto dto)
         {
-            if (dto.Username == _adminUserSettings.Value.Username &&
-                CryptographicOperations.FixedTimeEquals(
-                    Encoding.UTF8.GetBytes(dto.Password),
-                    Encoding.UTF8.GetBytes(_adminUserSettings.Value.Password))) // hash passwords to a fixed length
-            {
-                var keyBytes = Encoding.UTF8.GetBytes(_jwtSettings.Value.SigningKey);
-                var signingKey = new SymmetricSecurityKey(keyBytes);
-                var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
-                // The handler stamps nbf/iat with the system clock unless told otherwise: every date comes from one clock
-                var ahora = _reloj.GetUtcNow().UtcDateTime;
-                var tokenDescriptor = new SecurityTokenDescriptor
-                {
-                    // Generate a JWT token with the username as a claim
-                    Subject = new ClaimsIdentity(new[] { new Claim(ClaimTypes.Name, dto.Username) }),
-                    NotBefore = ahora,
-                    IssuedAt = ahora,
-                    Expires = ahora.AddMinutes(_jwtSettings.Value.ExpiryMinutes),
-                    Issuer = _jwtSettings.Value.Issuer,
-                    Audience = _jwtSettings.Value.Audience,
-                    SigningCredentials = credentials
-                };
+            var ahora = _reloj.GetUtcNow().UtcDateTime;
+            var usuario = await _usuarios.GetByUsernameAsync((dto.Username ?? "").Trim());
 
-                var handler = new JwtSecurityTokenHandler();
-                var token = handler.CreateToken(tokenDescriptor);
-                return handler.WriteToken(token);
+            if (usuario is null || !usuario.Activo)
+            {
+                _hasher.Verify(HashDeRelleno(), dto.Password ?? "");
+                return null;
             }
-            return null;
+
+            // The attempt is counted BEFORE the password is checked, so a burst of parallel guesses cannot all see the same count
+            var permitido = false;
+            await _usuarios.ModificarAsync(usuario.Id, u =>
+            {
+                permitido = u.ReservarIntentoLogin(ahora);
+                return true;
+            });
+
+            var correcta = _hasher.Verify(usuario.PasswordHash, dto.Password ?? "");
+            if (!permitido || !correcta)
+            {
+                return null; // a wrong password, a locked user and an unknown user answer the same
+            }
+
+            await _usuarios.ModificarAsync(usuario.Id, u =>
+            {
+                u.ReiniciarFallosLogin();
+                return true;
+            });
+            return Resultado(usuario, ahora);
+        }
+
+        /// <summary>A fresh token for the current user (sliding session); null when the user is no longer active.</summary>
+        public async Task<LoginResultadoDto?> RenovarAsync()
+        {
+            var usuario = await UsuarioActualAsync();
+            return usuario is null ? null : Resultado(usuario, _reloj.GetUtcNow().UtcDateTime);
+        }
+
+        /// <summary>The user chooses a new password (also the one forced after a reset). The old sessions end, so a fresh token is returned.</summary>
+        public async Task<LoginResultadoDto?> CambiarPasswordAsync(CambiarPasswordDto dto)
+        {
+            var usuario = await UsuarioActualAsync();
+            if (usuario is null)
+            {
+                return null;
+            }
+            // What does not depend on the current password is checked first, so it never costs an attempt
+            Usuario.ValidarPassword(dto.PasswordNueva, "passwordNueva");
+            if (dto.PasswordNueva == dto.PasswordActual)
+            {
+                throw new ReglaDeNegocioException("La contraseña nueva debe ser distinta de la actual.", "passwordNueva");
+            }
+
+            var ahora = _reloj.GetUtcNow().UtcDateTime;
+            var permitido = false;
+            await _usuarios.ModificarAsync(usuario.Id, u =>
+            {
+                permitido = u.ReservarIntentoLogin(ahora);
+                return true;
+            });
+            if (!permitido)
+            {
+                throw new DemasiadosIntentosException("Demasiados intentos. Probá de nuevo en unos minutos.");
+            }
+            if (!_hasher.Verify(usuario.PasswordHash, dto.PasswordActual ?? ""))
+            {
+                throw new ReglaDeNegocioException("La contraseña actual no es correcta.", "passwordActual");
+            }
+
+            usuario.CambiarPassword(_hasher.Hash(dto.PasswordNueva));
+            await _usuarios.UpdateAsync(usuario);
+            return Resultado(usuario, ahora);
+        }
+
+        /// <summary>Checked on every request: the user must exist, be active and carry the current security stamp.</summary>
+        public async Task<SesionValida?> ValidarSesionAsync(Guid usuarioId, Guid sello)
+        {
+            var usuario = await _usuarios.GetByIdAsync(usuarioId);
+            if (usuario is null || !usuario.Activo || usuario.SecurityStamp != sello)
+            {
+                return null;
+            }
+            return new SesionValida(usuario.DebeCambiarPassword);
+        }
+
+        private async Task<Usuario?> UsuarioActualAsync()
+        {
+            if (_actual.Id is not Guid id)
+            {
+                return null;
+            }
+            var usuario = await _usuarios.GetByIdAsync(id);
+            return usuario is { Activo: true } ? usuario : null;
+        }
+
+        private string HashDeRelleno() => _hashDeRelleno ??= _hasher.Hash("relleno-para-igualar-tiempos");
+
+        private LoginResultadoDto Resultado(Usuario usuario, DateTime ahora) => new()
+        {
+            Token = CrearToken(usuario, ahora),
+            DebeCambiarPassword = usuario.DebeCambiarPassword
+        };
+
+        private string CrearToken(Usuario usuario, DateTime ahora)
+        {
+            var settings = _jwtSettings.Value;
+            var credenciales = new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.SigningKey)), SecurityAlgorithms.HmacSha256);
+            var duracion = usuario.Rol == RolUsuario.Recepcion ? TimeSpan.FromDays(settings.RecepcionDias) : TimeSpan.FromHours(settings.PersonalHoras);
+
+            var claims = new List<Claim>
+            {
+                new(JwtRegisteredClaimNames.Sub, usuario.Id.ToString()),
+                new(ClaimRol, usuario.Rol.ToString()),
+                new(ClaimSello, usuario.SecurityStamp.ToString()),
+                new(ClaimNombre, usuario.Nombre)
+            };
+            if (usuario.DebeCambiarPassword)
+            {
+                claims.Add(new Claim(ClaimDebeCambiarPassword, "1"));
+            }
+
+            // The handler stamps nbf/iat with the system clock unless told otherwise: every date comes from one clock
+            var descriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(claims),
+                NotBefore = ahora,
+                IssuedAt = ahora,
+                Expires = ahora + duracion,
+                Issuer = settings.Issuer,
+                Audience = settings.Audience,
+                SigningCredentials = credenciales
+            };
+
+            var handler = new JwtSecurityTokenHandler();
+            return handler.WriteToken(handler.CreateToken(descriptor));
         }
     }
 }

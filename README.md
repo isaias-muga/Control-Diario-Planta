@@ -56,6 +56,7 @@ A _proveedor_ is a milk supplier; a _recepción_ is one delivery received at the
 - **Recepciones list.** Daily subtotals, filters by period, supplier, ticket and "out of range only".
 - **es-AR numbers and plant time.** `1.234,5` is read as 1234.5 (ambiguous input is rejected with a message). Dates are shown and validated in Buenos Aires time.
 - **Quick reception flow.** A phone-first screen (load, confirm, done) with big inputs, a full-screen confirmation that highlights values over the limits, and protection against double taps and lost connections.
+- **Users and roles.** Admin, Oficina (read only) and Recepcion (the reception phone: one button, and an operator PIN to say who loads each delivery). Permissions are enforced by the API; every delivery and supplier records who created it. Sessions end the moment a user is deactivated or changes the password.
 - Deliveries are records of what happened: they can be registered, not edited or deleted.
 
 ## Architecture
@@ -101,7 +102,7 @@ At runtime only the client is public (nginx serves it and proxies `/api`); the A
 ## Quality gates
 
 - **Tests:** 260 .NET tests (Domain, Application with Moq, Api, Infrastructure on in-memory SQLite, Architecture), 454 client tests, 32 Playwright end-to-end tests.
-- **Architecture tests** (`tests/DairyControl.ArchitectureTests`): the layer rules, no public setters on entities, value objects without setters, every domain exception derives from one base type, no `ArgumentException` for business rules, every controller except login has `[Authorize]`, no direct clock reads, and no entity holding a collection of another aggregate root. Breaking a rule fails the build.
+- **Architecture tests** (`tests/DairyControl.ArchitectureTests`): the layer rules, no public setters on entities, value objects without setters, every domain exception derives from one base type, no `ArgumentException` for business rules, every controller action names an explicit authorization policy and only login and `/health` are anonymous, no direct clock reads, and no entity holding a collection of another aggregate root. Breaking a rule fails the build.
 - **End-to-end in CI:** Playwright runs against the full Docker Compose stack (SQL Server included) and is a required check, together with `build-test` and `client`. A pull request is required to change `main`.
 - **Build:** warnings are errors and nullable is on everywhere, so an unsuppressed warning fails the build (NuGet vulnerability advisories are shown but do not fail it, a documented exception).
 - **`GET /health`:** 200 when the API and the database answer, 503 otherwise. CI waits on it.

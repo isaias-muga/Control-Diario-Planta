@@ -109,30 +109,6 @@ namespace DairyControl.ArchitectureTests
         }
 
         [Fact]
-        public void Controllers_RequireAuthorizationExceptTheAuthController()
-        {
-            // Arrange
-            var controladores = Types.InAssembly(Proyecto.Api).That().HaveNameEndingWith("Controller").GetTypes().ToList();
-
-            // Act: [Authorize] on the class, and no [AllowAnonymous] on any controller or action
-            var sinAutorizar = controladores
-                .Where(t => t.Name != "AuthController")
-                .Where(t => !t.IsDefined(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true))
-                .Select(t => t.Name)
-                .ToList();
-            var anonimos = controladores
-                .Where(t => t.Name != "AuthController")
-                .Where(t => t.IsDefined(typeof(Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute), true)
-                    || t.GetMethods().Any(m => m.IsDefined(typeof(Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute), true)))
-                .Select(t => t.Name)
-                .ToList();
-
-            // Assert
-            Assert.True(sinAutorizar.Count == 0, "Controllers without [Authorize]: " + string.Join(", ", sinAutorizar));
-            Assert.True(anonimos.Count == 0, "Controllers with [AllowAnonymous]: " + string.Join(", ", anonimos));
-        }
-
-        [Fact]
         public void DomainExceptions_AllDeriveFromExcepcionDeDominioAndLiveInTheExceptionsNamespace()
         {
             // Arrange

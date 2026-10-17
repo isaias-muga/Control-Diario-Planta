@@ -1,5 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { AuthService } from '../../services/auth';
 import { ProveedoresService } from '../../services/proveedores';
 import { Proveedor } from '../../models/proveedor';
 import { CrearProveedorDialog } from '../../components/crear-proveedor-dialog/crear-proveedor-dialog';
@@ -25,6 +26,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
   styleUrl: './proveedores-list.css',
 })
 export class ProveedoresList {
+  protected auth = inject(AuthService);
   private proveedoresService = inject(ProveedoresService);
   private snackBar = inject(MatSnackBar);
   private dialog = inject(MatDialog);

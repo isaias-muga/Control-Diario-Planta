@@ -1,6 +1,8 @@
 <div class="page-header">
   <h2>Proveedores</h2>
-  <button mat-flat-button type="button" (click)="abrirCrear()">Nuevo proveedor</button>
+  @if (auth.esAdmin()) {
+    <button mat-flat-button type="button" (click)="abrirCrear()">Nuevo proveedor</button>
+  }
 </div>
 
 @if (loading()) {

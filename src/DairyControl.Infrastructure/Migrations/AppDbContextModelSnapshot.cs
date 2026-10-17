@@ -47,10 +47,40 @@ namespace DairyControl.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("DairyControl.Domain.Entities.Operario", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PinHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PinHash")
+                        .IsUnique()
+                        .HasFilter("[Activo] = 1");
+
+                    b.ToTable("Operarios", (string)null);
+                });
+
             modelBuilder.Entity("DairyControl.Domain.Entities.Proveedor", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CreadoPorUsuarioId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Nombre")
@@ -59,6 +89,8 @@ namespace DairyControl.Infrastructure.Migrations
                         .HasColumnType("nvarchar(200)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreadoPorUsuarioId");
 
                     b.ToTable("Proveedores");
                 });
@@ -75,7 +107,16 @@ namespace DairyControl.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<Guid?>("OperarioId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("ProveedorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("RegistradoEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("RegistradoPorUsuarioId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<int?>("Silo")
@@ -88,6 +129,10 @@ namespace DairyControl.Infrastructure.Migrations
 
                     b.HasIndex("FechaHora");
 
+                    b.HasIndex("OperarioId");
+
+                    b.HasIndex("RegistradoPorUsuarioId");
+
                     b.HasIndex("Ticket")
                         .IsUnique()
                         .HasFilter("[Ticket] IS NOT NULL");
@@ -95,6 +140,68 @@ namespace DairyControl.Infrastructure.Migrations
                     b.HasIndex("ProveedorId", "FechaHora");
 
                     b.ToTable("Recepciones", (string)null);
+                });
+
+            modelBuilder.Entity("DairyControl.Domain.Entities.Usuario", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("DebeCambiarPassword")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("FallosLogin")
+                        .HasColumnType("int");
+
+                    b.Property<int>("FallosPin")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("LoginBloqueadoHastaUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("PinBloqueadoHastaUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("PrimerFalloPinUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Rol")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<Guid>("SecurityStamp")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Username")
+                        .IsUnique();
+
+                    b.ToTable("Usuarios", (string)null);
                 });
 
             modelBuilder.Entity("DairyControl.Domain.Entities.ConfiguracionCalidad", b =>
@@ -137,13 +244,31 @@ namespace DairyControl.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DairyControl.Domain.Entities.Proveedor", b =>
+                {
+                    b.HasOne("DairyControl.Domain.Entities.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("CreadoPorUsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("DairyControl.Domain.Entities.RecepcionLeche", b =>
                 {
+                    b.HasOne("DairyControl.Domain.Entities.Operario", null)
+                        .WithMany()
+                        .HasForeignKey("OperarioId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("DairyControl.Domain.Entities.Proveedor", null)
                         .WithMany()
                         .HasForeignKey("ProveedorId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("DairyControl.Domain.Entities.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("RegistradoPorUsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.OwnsOne("DairyControl.Domain.ValueObjects.ParametrosCalidad", "Parametros", b1 =>
                         {

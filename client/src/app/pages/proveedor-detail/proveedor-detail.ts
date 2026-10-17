@@ -2,6 +2,7 @@ import { Component, effect, inject, input, signal, untracked, viewChild } from '
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
+import { AuthService } from '../../services/auth';
 import { ProveedoresService } from '../../services/proveedores';
 import { Proveedor } from '../../models/proveedor';
 import { RecepcionesPanel } from '../../components/recepciones-panel/recepciones-panel';
@@ -17,6 +18,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
   styleUrl: './proveedor-detail.css',
 })
 export class ProveedorDetail {
+  protected auth = inject(AuthService);
   private proveedoresService = inject(ProveedoresService);
   private dialog = inject(MatDialog);
   private request?: Subscription;

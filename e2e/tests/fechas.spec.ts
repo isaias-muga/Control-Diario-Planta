@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../fixtures';
 import { abrirRegistro, crearProveedor, descartarRegistro, loginYEsperarResumen, rellenar } from '../helpers';
 
 const ZONA_PLANTA = 'America/Argentina/Buenos_Aires';

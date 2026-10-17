@@ -1,0 +1,58 @@
+<h2 mat-dialog-title>Nuevo usuario</h2>
+
+<form [formGroup]="form" (ngSubmit)="crear()" novalidate>
+  <mat-dialog-content>
+    <div class="content">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Usuario</mat-label>
+        <input matInput id="username" type="text" formControlName="username" autocomplete="off" [maxlength]="usernameMax" />
+        @if (errorDe('username'); as mensaje) {
+          <mat-error>{{ mensaje }}</mat-error>
+        } @else if (form.controls.username.touched && form.controls.username.invalid) {
+          <mat-error>Entre {{ usernameMin }} y {{ usernameMax }} caracteres: letras sin acentos, números, punto, guion o guion bajo.</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Nombre</mat-label>
+        <input matInput id="nombre" type="text" formControlName="nombre" autocomplete="off" [maxlength]="nombreMax" />
+        @if (errorDe('nombre'); as mensaje) {
+          <mat-error>{{ mensaje }}</mat-error>
+        } @else if (form.controls.nombre.touched && form.controls.nombre.invalid) {
+          <mat-error>Ingresá un nombre (máximo {{ nombreMax }} caracteres).</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Rol</mat-label>
+        <mat-select id="rol" formControlName="rol">
+          @for (rol of roles; track rol) {
+            <mat-option [value]="rol">{{ etiquetas[rol] }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Contraseña temporal</mat-label>
+        <input matInput id="password" type="password" formControlName="password" autocomplete="new-password" />
+        @if (errorDe('password'); as mensaje) {
+          <mat-error>{{ mensaje }}</mat-error>
+        } @else if (form.controls.password.touched && form.controls.password.invalid) {
+          <mat-error>Al menos {{ passwordMin }} caracteres.</mat-error>
+        }
+      </mat-form-field>
+      <p class="ayuda">La persona va a tener que elegir su propia contraseña la primera vez que entre.</p>
+
+      @if (saveError()) {
+        <p class="form-error" role="alert">{{ saveError() }}</p>
+      }
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" mat-dialog-close>Cancelar</button>
+    <button mat-flat-button type="submit" [disabled]="saving()">
+      {{ saving() ? 'Guardando...' : 'Crear' }}
+    </button>
+  </mat-dialog-actions>
+</form>

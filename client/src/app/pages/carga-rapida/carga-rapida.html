@@ -10,17 +10,25 @@
           <p class="error" role="alert">{{ errorCarga() }}</p>
         }
 
-        <mat-form-field appearance="outline">
-          <mat-label>Proveedor</mat-label>
-          <mat-select id="proveedorId" formControlName="proveedorId">
-            @for (p of proveedores(); track p.id) {
-              <mat-option [value]="p.id">{{ p.nombre }}</mat-option>
+        @if (proveedoresCargados()) {
+          <mat-form-field appearance="outline">
+            <mat-label>Proveedor</mat-label>
+            <mat-select id="proveedorId" formControlName="proveedorId">
+              @for (p of proveedores(); track p.id) {
+                <mat-option [value]="p.id">{{ p.nombre }}</mat-option>
+              }
+            </mat-select>
+            @if (invalid('proveedorId')) {
+              <mat-error>Elegí un proveedor.</mat-error>
             }
-          </mat-select>
-          @if (invalid('proveedorId')) {
-            <mat-error>Elegí un proveedor.</mat-error>
-          }
-        </mat-form-field>
+          </mat-form-field>
+        } @else if (!proveedoresError()) {
+          <!-- Not a select yet: an empty one ignores the tap and nobody knows why -->
+          <mat-form-field appearance="outline">
+            <mat-label>Proveedor</mat-label>
+            <input matInput disabled aria-busy="true" value="Cargando proveedores…" />
+          </mat-form-field>
+        }
         @if (proveedoresError()) {
           <p class="error" role="alert">{{ proveedoresError() }}</p>
         }
@@ -168,6 +176,24 @@
           }
         </dl>
 
+        @if (auth.esRecepcion()) {
+          <mat-form-field appearance="outline" class="campo-pin">
+            <mat-label>Tu PIN de operario</mat-label>
+            <input
+              matInput
+              id="pin"
+              type="password"
+              inputmode="numeric"
+              autocomplete="off"
+              [maxlength]="pinLength"
+              [formControl]="pin"
+            />
+            @if (pin.touched && pin.invalid) {
+              <mat-error>{{ pin.errors?.['servidor'] ?? 'El PIN tiene ' + pinLength + ' dígitos.' }}</mat-error>
+            }
+          </mat-form-field>
+        }
+
         @if (fallo(); as f) {
           <div class="aviso-fallo" role="alert">
             <strong>{{ f.puedeReintentar ? 'No se guardó' : 'Revisá antes de cargarla de nuevo' }}</strong>
@@ -182,7 +208,7 @@
             {{ enviando() ? 'Guardando...' : fallo() ? 'Reintentar' : 'Confirmar' }}
           </button>
         } @else {
-          <a mat-flat-button class="boton" routerLink="/recepciones">Ir a Recepciones</a>
+          <a mat-flat-button class="boton" [routerLink]="auth.esRecepcion() ? '/inicio' : '/recepciones'">{{ auth.esRecepcion() ? 'Volver al inicio' : 'Ir a Recepciones' }}</a>
         }
         <button mat-stroked-button type="button" class="boton" [disabled]="enviando()" (click)="corregir()">
           Corregir
@@ -201,15 +227,22 @@
         <h2 #titulo id="titulo-listo" class="titulo-verde" tabindex="-1">Recepción guardada</h2>
 
         @if (cargada(); as c) {
-          <p class="resumen-listo">Ticket <strong>{{ c.ticket }}</strong> · {{ c.litros | number: '1.0-3' }} L</p>
-          <p class="proveedor-listo">{{ c.proveedor }}</p>
+          <p class="resumen-listo">Ticket <strong>{{ c.ticket ?? '—' }}</strong> · {{ c.litros | number: '1.0-3' }} L</p>
+          <p class="proveedor-listo">
+            {{ c.proveedor }}
+            @if (c.operario) {
+              · cargó {{ c.operario }}
+            }
+          </p>
         }
       </div>
 
       <div class="acciones">
         <p class="info">¿Te equivocaste? Avisá en la oficina: la corrección la hace el administrador.</p>
         <button mat-flat-button type="button" class="boton" (click)="nuevaRecepcion()">Nueva recepción</button>
-        <a mat-button class="enlace" routerLink="/recepciones">Ir a Recepciones</a>
+        @if (!auth.esRecepcion()) {
+          <a mat-button class="enlace" routerLink="/recepciones">Ir a Recepciones</a>
+        }
       </div>
     </section>
   }

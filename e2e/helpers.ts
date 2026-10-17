@@ -37,9 +37,9 @@ export async function rellenar(campo: Locator, valor: string): Promise<void> {
   }).toPass({ timeout: 10_000 });
 }
 
-export async function login(page: Page, password = adminPassword()): Promise<void> {
+export async function login(page: Page, password = adminPassword(), usuario = 'admin'): Promise<void> {
   await page.goto('/login');
-  await page.getByLabel('Usuario').fill('admin');
+  await page.getByLabel('Usuario').fill(usuario);
   await page.getByLabel('Contraseña').fill(password);
   await page.getByRole('button', { name: 'Ingresar' }).click();
 }
@@ -115,11 +115,24 @@ export async function guardarLimites(page: Page): Promise<void> {
   await expect(page.getByText('Configuración guardada.').first()).toBeVisible();
 }
 
+/** Opens Configuración from the settings menu of the toolbar (the gear). */
+export async function irAConfiguracion(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Ajustes' }).click();
+  await page.getByRole('menuitem', { name: 'Configuración' }).click();
+}
+
 /** Logs in through the API (no page needed) and returns the headers of an authenticated request. */
-async function cabecerasAutenticadas(request: APIRequestContext): Promise<{ Authorization: string }> {
+let tokenDeAdmin: string | null = null;
+
+export async function cabecerasAutenticadas(request: APIRequestContext): Promise<{ Authorization: string }> {
+  // One login for the whole run (the token lasts hours): the login endpoint is rate limited per address
+  if (tokenDeAdmin) {
+    return { Authorization: `Bearer ${tokenDeAdmin}` };
+  }
   const login = await request.post('/api/Auth/login', { data: { username: 'admin', password: adminPassword() } });
   expect(login.status()).toBe(200);
-  return { Authorization: `Bearer ${(await login.json()).token}` };
+  tokenDeAdmin = (await login.json()).token as string;
+  return { Authorization: `Bearer ${tokenDeAdmin}` };
 }
 
 /**
@@ -160,4 +173,74 @@ export async function restaurarAcidezMaxima(request: APIRequestContext): Promise
   });
   expect(guardado.status()).toBe(200);
   expect((await guardado.json()).acidezMaxima).toBe(ACIDEZ_MAXIMA_PREDETERMINADA);
+}
+
+/** The temporary password every user created by these helpers starts with (it must be changed at the first login). */
+export const PASSWORD_TEMPORAL = 'Temporal-12345';
+export const PASSWORD_PROPIA = 'Propia-12345-xyz';
+
+export interface PersonaDePrueba {
+  username: string;
+  nombre: string;
+}
+
+/** Creates a user of that role through the admin API, with the temporary password. */
+export async function crearUsuarioPorApi(request: APIRequestContext, rol: 'Admin' | 'Oficina' | 'Recepcion'): Promise<PersonaDePrueba> {
+  const headers = await cabecerasAutenticadas(request);
+  const sufijo = uniqueSuffix().replace(/[^a-z0-9]/gi, '');
+  const persona = { username: `e2e.${rol.toLowerCase()}.${sufijo}`, nombre: `E2E ${rol} ${sufijo}` };
+  const respuesta = await request.post('/api/Usuarios', { headers, data: { ...persona, rol, password: PASSWORD_TEMPORAL } });
+  expect(respuesta.status()).toBe(200);
+  return persona;
+}
+
+/** The user chooses a password of their own through the API (what the forced change page does). Returns the new token. */
+export async function elegirPasswordPorApi(request: APIRequestContext, username: string): Promise<string> {
+  const login = await request.post('/api/Auth/login', { data: { username, password: PASSWORD_TEMPORAL } });
+  expect(login.status()).toBe(200);
+  const { token } = await login.json();
+  const cambio = await request.post('/api/Auth/cambiar-password', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { passwordActual: PASSWORD_TEMPORAL, passwordNueva: PASSWORD_PROPIA },
+  });
+  expect(cambio.status()).toBe(200);
+  return (await cambio.json()).token;
+}
+
+/** A user that already chose its password, ready to log in with PASSWORD_PROPIA. */
+export async function crearUsuarioListoPorApi(request: APIRequestContext, rol: 'Admin' | 'Oficina' | 'Recepcion'): Promise<PersonaDePrueba> {
+  const persona = await crearUsuarioPorApi(request, rol);
+  await elegirPasswordPorApi(request, persona.username);
+  return persona;
+}
+
+/** Creates an operario with a PIN nobody else uses (only active operarios must differ, so it retries on a clash). */
+export async function crearOperarioPorApi(request: APIRequestContext): Promise<{ nombre: string; pin: string }> {
+  const headers = await cabecerasAutenticadas(request);
+  const nombre = `E2E Operario ${uniqueSuffix()}`;
+  for (let intento = 0; intento < 40; intento++) {
+    const pin = String(Math.floor(Math.random() * 10_000)).padStart(4, '0');
+    const respuesta = await request.post('/api/Operarios', { headers, data: { nombre, pin } });
+    if (respuesta.status() === 200) {
+      return { nombre, pin };
+    }
+    expect(respuesta.status()).toBe(409);
+  }
+  throw new Error('No free PIN found for the test operario.');
+}
+
+/** Creates a proveedor through the admin API and returns its name. */
+export async function crearProveedorPorApi(request: APIRequestContext): Promise<string> {
+  const headers = await cabecerasAutenticadas(request);
+  const nombre = nombreUnico();
+  const respuesta = await request.post('/api/Proveedores', { headers, data: { nombre } });
+  expect(respuesta.status()).toBe(201);
+  return nombre;
+}
+
+/** Logs in through the login page as that user (with the password of the helpers) and waits for the first screen. */
+export async function loginComo(page: Page, persona: PersonaDePrueba, password = PASSWORD_PROPIA): Promise<void> {
+  await login(page, password, persona.username);
+  // Wait for the session to be stored: leaving the login page is the sign that the token arrived
+  await expect(page).not.toHaveURL(/\/login/);
 }

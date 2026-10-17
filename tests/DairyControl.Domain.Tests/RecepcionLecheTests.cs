@@ -9,11 +9,43 @@ namespace DairyControl.Domain.Tests
         private static readonly Guid ProveedorId = Guid.NewGuid();
         private static readonly DateTime Ahora = new(2026, 10, 15, 12, 0, 0);
         private static readonly DateTime Fecha = new(2026, 10, 1, 6, 0, 0);
+        private static readonly Guid UsuarioId = Guid.NewGuid();
+        private static readonly DateTime AhoraUtc = new(2026, 10, 15, 15, 0, 0, DateTimeKind.Utc);
 
         private static RecepcionLeche Registrar(decimal litros, decimal? agua, int? ticket = null)
         {
             var parametros = ParametrosCalidad.Create(null, 18m, 4m, litros, agua);
-            return RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, 1, null, ticket);
+            return RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, 1, null, UsuarioId, null, AhoraUtc, ticket);
+        }
+
+        [Fact]
+        public void Registrar_WithAuditData_StoresWhoAndWhenRegistered()
+        {
+            // Arrange
+            var parametros = ParametrosCalidad.Create(null, 18m, 4m, 1000m);
+            var operarioId = Guid.NewGuid();
+
+            // Act
+            var recepcion = RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, 1, null, UsuarioId, operarioId, AhoraUtc);
+
+            // Assert
+            Assert.Equal(UsuarioId, recepcion.RegistradoPorUsuarioId);
+            Assert.Equal(operarioId, recepcion.OperarioId);
+            Assert.Equal(AhoraUtc, recepcion.RegistradoEn);
+        }
+
+        [Fact]
+        public void Registrar_EmptyUsuarioId_ThrowsReglaDeNegocioException()
+        {
+            // Arrange
+            var parametros = ParametrosCalidad.Create(null, 18m, 4m, 1000m);
+
+            // Act
+            var ex = Assert.Throws<ReglaDeNegocioException>(() =>
+                RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, 1, null, Guid.Empty, null, AhoraUtc));
+
+            // Assert
+            Assert.Equal("registradoPorUsuarioId", ex.Campo);
         }
 
         [Theory]
@@ -25,7 +57,7 @@ namespace DairyControl.Domain.Tests
             var parametros = ParametrosCalidad.Create(null, 18m, 4m, 1000m, null);
 
             // Act
-            var recepcion = RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, 1, observaciones);
+            var recepcion = RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, 1, observaciones, UsuarioId, null, AhoraUtc);
 
             // Assert
             Assert.Null(recepcion.Observaciones);
@@ -105,7 +137,7 @@ namespace DairyControl.Domain.Tests
             var parametros = ParametrosCalidad.Create(null, 18m, 4m, 1000m);
 
             // Act
-            var recepcion = RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, silo, null);
+            var recepcion = RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, silo, null, UsuarioId, null, AhoraUtc);
 
             // Assert
             Assert.Equal(silo, recepcion.Silo);
@@ -118,7 +150,7 @@ namespace DairyControl.Domain.Tests
             var parametros = ParametrosCalidad.Create(null, 18m, 4m, 1000m);
 
             // Act
-            var recepcion = RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, null, null);
+            var recepcion = RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, null, null, UsuarioId, null, AhoraUtc);
 
             // Assert
             Assert.Null(recepcion.Silo);
@@ -136,7 +168,7 @@ namespace DairyControl.Domain.Tests
 
             // Act
             var ex = Assert.Throws<ReglaDeNegocioException>(() =>
-                RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, silo, null));
+                RecepcionLeche.Registrar(ProveedorId, parametros, Fecha, Ahora, silo, null, UsuarioId, null, AhoraUtc));
 
             // Assert
             Assert.Equal("silo", ex.Campo);
@@ -151,7 +183,7 @@ namespace DairyControl.Domain.Tests
 
             // Act
             var ex = Assert.Throws<ReglaDeNegocioException>(() =>
-                RecepcionLeche.Registrar(ProveedorId, parametros, Ahora.AddHours(1).AddSeconds(1), Ahora, 1, null));
+                RecepcionLeche.Registrar(ProveedorId, parametros, Ahora.AddHours(1).AddSeconds(1), Ahora, 1, null, UsuarioId, null, AhoraUtc));
 
             // Assert
             Assert.Equal("fechaHora", ex.Campo);
@@ -167,7 +199,7 @@ namespace DairyControl.Domain.Tests
 
             // Act
             var ex = Assert.Throws<ReglaDeNegocioException>(() =>
-                RecepcionLeche.Registrar(ProveedorId, parametros, default, Ahora, 1, null));
+                RecepcionLeche.Registrar(ProveedorId, parametros, default, Ahora, 1, null, UsuarioId, null, AhoraUtc));
 
             // Assert
             Assert.Equal("fechaHora", ex.Campo);
@@ -182,7 +214,7 @@ namespace DairyControl.Domain.Tests
 
             // Act
             var ex = Assert.Throws<ReglaDeNegocioException>(() =>
-                RecepcionLeche.Registrar(ProveedorId, parametros, new DateTime(1999, 12, 31, 23, 59, 0), Ahora, 1, null));
+                RecepcionLeche.Registrar(ProveedorId, parametros, new DateTime(1999, 12, 31, 23, 59, 0), Ahora, 1, null, UsuarioId, null, AhoraUtc));
 
             // Assert
             Assert.Equal("fechaHora", ex.Campo);
@@ -196,7 +228,7 @@ namespace DairyControl.Domain.Tests
             var parametros = ParametrosCalidad.Create(null, 18m, 4m, 1000m);
 
             // Act
-            var recepcion = RecepcionLeche.Registrar(ProveedorId, parametros, new DateTime(2000, 1, 1), Ahora, 1, null);
+            var recepcion = RecepcionLeche.Registrar(ProveedorId, parametros, new DateTime(2000, 1, 1), Ahora, 1, null, UsuarioId, null, AhoraUtc);
 
             // Assert
             Assert.Equal(new DateTime(2000, 1, 1), recepcion.FechaHora);
@@ -209,7 +241,7 @@ namespace DairyControl.Domain.Tests
             var parametros = ParametrosCalidad.Create(null, 18m, 4m, 1000m);
 
             // Act
-            var recepcion = RecepcionLeche.Registrar(ProveedorId, parametros, Ahora.AddHours(1), Ahora, 1, null);
+            var recepcion = RecepcionLeche.Registrar(ProveedorId, parametros, Ahora.AddHours(1), Ahora, 1, null, UsuarioId, null, AhoraUtc);
 
             // Assert
             Assert.Equal(Ahora.AddHours(1), recepcion.FechaHora);
@@ -225,7 +257,7 @@ namespace DairyControl.Domain.Tests
 
             // Act
             var ex = Assert.Throws<ReglaDeNegocioException>(() =>
-                RecepcionLeche.Registrar(ProveedorId, parametros, Ahora.AddHours(1).AddMinutes(minutosExtra), Ahora, 1, null));
+                RecepcionLeche.Registrar(ProveedorId, parametros, Ahora.AddHours(1).AddMinutes(minutosExtra), Ahora, 1, null, UsuarioId, null, AhoraUtc));
 
             // Assert
             Assert.Equal("fechaHora", ex.Campo);
@@ -250,7 +282,7 @@ namespace DairyControl.Domain.Tests
 
             // Act
             var ex = Assert.Throws<ReglaDeNegocioException>(() =>
-                RecepcionLeche.Registrar(Guid.Empty, parametros, Fecha, Ahora, 1, null));
+                RecepcionLeche.Registrar(Guid.Empty, parametros, Fecha, Ahora, 1, null, UsuarioId, null, AhoraUtc));
 
             // Assert
             Assert.Equal("proveedorId", ex.Campo);
@@ -261,7 +293,7 @@ namespace DairyControl.Domain.Tests
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                RecepcionLeche.Registrar(ProveedorId, null!, Fecha, Ahora, 1, null));
+                RecepcionLeche.Registrar(ProveedorId, null!, Fecha, Ahora, 1, null, UsuarioId, null, AhoraUtc));
         }
 
         [Theory]

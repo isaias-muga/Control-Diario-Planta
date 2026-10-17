@@ -15,6 +15,9 @@ public static class DependencyInjection
         services.AddScoped<ListadoRecepcionesAppService>();
         services.AddScoped<ConfiguracionCalidadAppService>();
         services.AddScoped<AuthService>();
+        services.AddScoped<UsuarioAppService>();
+        services.AddScoped<OperarioAppService>();
+        services.AddScoped<VerificacionPinService>();
         return services;
     }
 }

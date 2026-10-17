@@ -1,4 +1,5 @@
 import { LOCALE_ID } from '@angular/core';
+import { cerrarSesionDePrueba, iniciarSesionDePrueba } from '../../testing/sesion';
 import { registerLocaleData } from '@angular/common';
 import localeEsAr from '@angular/common/locales/es-AR';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -42,6 +43,7 @@ describe('ProveedorDetail', () => {
   let http: HttpTestingController;
 
   beforeEach(async () => {
+    iniciarSesionDePrueba('Admin');
     await TestBed.configureTestingModule({
       imports: [ProveedorDetail],
       providers: [
@@ -62,6 +64,7 @@ describe('ProveedorDetail', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     http.verify();
+    cerrarSesionDePrueba();
   });
 
   /** Answers the proveedor request and, once the page shows the panel, the panel's own requests. */
@@ -182,5 +185,27 @@ describe('ProveedorDetail', () => {
     expect(el().querySelector('h2')?.textContent).toBe('Tambo Otro');
     http.match((r) => r.url.endsWith('/Recepciones')).forEach((r) => r.flush(vacio));
     http.match((r) => r.url.endsWith('/Configuracion/calidad')).forEach((r) => r.flush(LIMITES));
+  });
+
+  it('offers no way to register a recepción to the office (read only)', async () => {
+    TestBed.resetTestingModule();
+    cerrarSesionDePrueba();
+    iniciarSesionDePrueba('Oficina');
+    TestBed.configureTestingModule({
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: LOCALE_ID, useValue: 'es-AR' }],
+    });
+    http = TestBed.inject(HttpTestingController);
+    fixture = TestBed.createComponent(ProveedorDetail);
+    component = fixture.componentInstance;
+    fixture.componentRef.setInput('id', 'test-id');
+    await fixture.whenStable();
+
+    http.expectOne((r) => r.url.endsWith(`/Proveedores/${component.id()}`)).flush(proveedores[1]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    http.match(() => true); // the panel's own requests are not what this test is about
+
+    expect(el().querySelector('h2')?.textContent).toBe('Tambo Test');
+    expect(el().querySelector('.page-header button')).toBeNull();
   });
 });

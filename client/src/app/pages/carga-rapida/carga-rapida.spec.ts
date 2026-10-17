@@ -3,21 +3,31 @@ import { registerLocaleData } from '@angular/common';
 import localeEsAr from '@angular/common/locales/es-AR';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, TestRequest, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { CargaRapida } from './carga-rapida';
+import { cerrarSesionDePrueba, iniciarSesionDePrueba } from '../../testing/sesion';
+import { Rol } from '../../utils/jwt';
 
 registerLocaleData(localeEsAr);
 
 const LIMITES = { acidezMaxima: 19, temperaturaMaxima: 20, aguaMaxima: 0, actualizadoEn: '2026-10-15T00:00:00Z' };
-const PROVEEDOR = { id: 'p1', nombre: 'Tambo Don Pedro', cantidadRecepciones: 3 };
+const PROVEEDOR = { id: 'p1', nombre: 'Tambo Don Pedro' };
+
+/** What the API answers when it saved the recepción that was sent (the operario only when a PIN identified one). */
+function ok(peticion: TestRequest, operarioNombre: string | null = null): void {
+  const enviado = peticion.request.body as { ticket: number | null; litros: number };
+  peticion.flush({ id: 'r1', ticket: enviado.ticket, litros: enviado.litros, proveedorNombre: PROVEEDOR.nombre, operarioNombre });
+}
 
 describe('CargaRapida', () => {
   let fixture: ComponentFixture<CargaRapida>;
   let component: CargaRapida;
   let http: HttpTestingController;
 
-  beforeEach(async () => {
+  /** Opens the page as a user of that role and answers the three requests it makes when it starts. */
+  async function preparar(rol: Rol): Promise<void> {
+    iniciarSesionDePrueba(rol);
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
@@ -31,15 +41,18 @@ describe('CargaRapida', () => {
     fixture = TestBed.createComponent(CargaRapida);
     component = fixture.componentInstance;
     await fixture.whenStable();
-    http.expectOne((r) => r.url.endsWith('/Proveedores')).flush([PROVEEDOR]);
+    http.expectOne((r) => r.url.endsWith('/Proveedores/opciones')).flush([PROVEEDOR]);
     http.expectOne((r) => r.url.endsWith('/Configuracion/calidad')).flush(LIMITES);
     http.expectOne((r) => r.url.endsWith('/Recepciones/siguiente-ticket')).flush({ ticket: 4981 });
     await fixture.whenStable();
-  });
+  }
+
+  beforeEach(() => preparar('Admin'));
 
   afterEach(() => {
     vi.restoreAllMocks();
     http.verify();
+    cerrarSesionDePrueba();
   });
 
   const el = (): HTMLElement => fixture.nativeElement;
@@ -164,7 +177,7 @@ describe('CargaRapida', () => {
     enviar();
     const req = peticionPost();
     expect(req.request.body).toMatchObject({ fechaHora, litros: 1200, aguaPorcentaje: 10, ticket: 4981, acidez: 17, temperatura: 5 });
-    req.flush(PROVEEDOR);
+    ok(req);
     fixture.detectChanges();
 
     expect(component.paso()).toBe('listo');
@@ -182,14 +195,14 @@ describe('CargaRapida', () => {
     component.enviar();
     component.enviar();
 
-    peticionPost().flush(PROVEEDOR);
+    ok(peticionPost());
   });
 
   it('starts an empty form (with the next suggested ticket) on Nueva recepción', () => {
     cargar();
     component.continuar();
     enviar();
-    peticionPost().flush(PROVEEDOR);
+    ok(peticionPost());
 
     component.nuevaRecepcion();
     http.expectOne((r) => r.url.endsWith('/Recepciones/siguiente-ticket')).flush({ ticket: 4982 });
@@ -249,7 +262,7 @@ describe('CargaRapida', () => {
 
       enviar();
       const segundo = peticionPost();
-      segundo.flush(PROVEEDOR);
+      ok(segundo);
 
       expect(segundo.request.body).toEqual(cuerpo);
       expect(component.paso()).toBe('listo');
@@ -301,6 +314,191 @@ describe('CargaRapida', () => {
 
       expect(component.paso()).toBe('carga');
       expect(texto()).toContain('Ese ticket ya fue cargado. Consultá en la oficina.');
+    });
+  });
+
+  describe('on the reception phone (role Recepcion)', () => {
+    beforeEach(async () => {
+      // The default admin page of the outer beforeEach is replaced by one opened as the reception phone
+      http.verify();
+      TestBed.resetTestingModule();
+      await preparar('Recepcion');
+    });
+
+    const pin = (): HTMLInputElement | null => el().querySelector('#pin');
+
+    function confirmar(): void {
+      cargar();
+      component.continuar();
+      fixture.detectChanges();
+    }
+
+    it('asks for the operario PIN, masked and with a numeric keyboard, only on the confirmation', () => {
+      cargar();
+      expect(pin()).toBeNull();
+
+      component.continuar();
+      fixture.detectChanges();
+
+      expect(pin()).not.toBeNull();
+      expect(pin()?.type).toBe('password');
+      expect(pin()?.getAttribute('inputmode')).toBe('numeric');
+      expect(pin()?.maxLength).toBe(4);
+      expect(texto()).toContain('Tu PIN de operario');
+    });
+
+    it('does not send without a valid PIN', () => {
+      confirmar();
+
+      component.enviar();
+      component.pin.setValue('12');
+      component.enviar();
+
+      http.expectNone((r) => r.method === 'POST');
+      expect(component.pin.touched).toBe(true);
+    });
+
+    it('sends the PIN with the recepción and shows who loaded it on the done step', () => {
+      confirmar();
+      component.pin.setValue('4321');
+
+      component.enviar();
+      const req = peticionPost();
+      expect(req.request.body.pin).toBe('4321');
+      ok(req, 'Juan Pérez');
+      fixture.detectChanges();
+
+      expect(component.paso()).toBe('listo');
+      expect(texto()).toContain('Tambo Don Pedro');
+      expect(texto()).toContain('cargó Juan Pérez');
+      expect(component.pin.value).toBe('');
+    });
+
+    it('hides the link to Recepciones on the done step (the phone has no such page)', () => {
+      confirmar();
+      component.pin.setValue('4321');
+      component.enviar();
+      ok(peticionPost(), 'Juan Pérez');
+      fixture.detectChanges();
+
+      const enlaces = Array.from(el().querySelectorAll('a')).map((a) => a.getAttribute('href'));
+
+      expect(enlaces).not.toContain('/recepciones');
+      expect(Array.from(el().querySelectorAll('button')).map((b) => b.textContent?.trim())).toContain('Nueva recepción');
+    });
+
+    it('shows a wrong PIN next to the field, stays on the confirmation and clears the PIN', () => {
+      confirmar();
+      component.pin.setValue('0000');
+
+      component.enviar();
+      peticionPost().flush({ error: 'PIN incorrecto.', field: 'pin' }, { status: 400, statusText: 'Bad Request' });
+      fixture.detectChanges();
+
+      expect(component.paso()).toBe('confirmar');
+      expect(component.pin.value).toBe('');
+      expect(texto()).toContain('PIN incorrecto.');
+      expect(texto()).not.toContain('No se guardó');
+    });
+
+    it('shows the lockout message next to the PIN when there were too many wrong ones (429)', () => {
+      confirmar();
+      component.pin.setValue('0000');
+
+      component.enviar();
+      peticionPost().flush({ error: 'Demasiados intentos con el PIN. Esperá unos minutos o avisá en la oficina.' }, { status: 429, statusText: 'Too Many Requests' });
+      fixture.detectChanges();
+
+      expect(component.paso()).toBe('confirmar');
+      expect(texto()).toContain('Demasiados intentos con el PIN.');
+    });
+
+    it('lets the operario type the PIN again after a wrong one', () => {
+      confirmar();
+      component.pin.setValue('0000');
+      component.enviar();
+      peticionPost().flush({ error: 'PIN incorrecto.', field: 'pin' }, { status: 400, statusText: 'Bad Request' });
+
+      component.pin.setValue('4321');
+      component.enviar();
+      ok(peticionPost(), 'Juan Pérez');
+
+      expect(component.paso()).toBe('listo');
+    });
+
+    it('clears the PIN when the operario goes back with Corregir', () => {
+      confirmar();
+      component.pin.setValue('4321');
+
+      component.corregir();
+
+      expect(component.pin.value).toBe('');
+    });
+
+    it('sends one request when Confirmar is tapped twice with a PIN', () => {
+      confirmar();
+      component.pin.setValue('4321');
+
+      component.enviar();
+      component.enviar();
+
+      ok(peticionPost());
+    });
+  });
+
+  describe('while the proveedores are still loading', () => {
+    /** Opens the page and answers the limits and the ticket, but NOT the proveedor options yet. */
+    async function abrirSinOpciones(): Promise<void> {
+      http.verify();
+      TestBed.resetTestingModule();
+      iniciarSesionDePrueba('Admin');
+      TestBed.configureTestingModule({
+        providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: LOCALE_ID, useValue: 'es-AR' }],
+      });
+      http = TestBed.inject(HttpTestingController);
+      vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+      fixture = TestBed.createComponent(CargaRapida);
+      component = fixture.componentInstance;
+      await fixture.whenStable();
+      http.expectOne((r) => r.url.endsWith('/Configuracion/calidad')).flush(LIMITES);
+      http.expectOne((r) => r.url.endsWith('/Recepciones/siguiente-ticket')).flush({ ticket: 4981 });
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+
+    it('shows a disabled "Cargando proveedores…" field instead of a select that would ignore the tap', async () => {
+      await abrirSinOpciones();
+
+      const campo = el().querySelector('input[aria-busy="true"]') as HTMLInputElement;
+      expect(campo).not.toBeNull();
+      expect(campo.disabled).toBe(true);
+      expect(campo.value).toBe('Cargando proveedores…');
+      expect(el().querySelector('mat-select')).toBeNull();
+
+      http.expectOne((r) => r.url.endsWith('/Proveedores/opciones')).flush([PROVEEDOR]);
+    });
+
+    it('swaps it for the real select once the options have arrived', async () => {
+      await abrirSinOpciones();
+
+      http.expectOne((r) => r.url.endsWith('/Proveedores/opciones')).flush([PROVEEDOR]);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(el().querySelector('input[aria-busy="true"]')).toBeNull();
+      expect(el().querySelector('mat-select')).not.toBeNull();
+    });
+
+    it('shows the error and no dead select when the options cannot be loaded', async () => {
+      await abrirSinOpciones();
+
+      http.expectOne((r) => r.url.endsWith('/Proveedores/opciones')).flush({ error: 'No tenés permiso para esta acción.' }, { status: 403, statusText: 'Forbidden' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(el().querySelector('mat-select')).toBeNull();
+      expect(el().querySelector('input[aria-busy="true"]')).toBeNull();
+      expect(texto()).toContain('No tenés permiso para esta acción.');
     });
   });
 });

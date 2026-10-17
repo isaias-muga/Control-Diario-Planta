@@ -15,7 +15,11 @@
     </mat-card-header>
 
     <mat-card-content>
-      <p class="nota">Los cambios se aplican de inmediato a todos los informes.</p>
+      @if (auth.esAdmin()) {
+        <p class="nota">Los cambios se aplican de inmediato a todos los informes.</p>
+      } @else {
+        <p class="nota">Solo un administrador puede cambiar los límites.</p>
+      }
 
       <form [formGroup]="form" (ngSubmit)="guardar()">
         <div class="grid">
@@ -59,9 +63,11 @@
               Última modificación: {{ fecha | date: 'dd/MM/yyyy HH:mm' }}
             </span>
           }
-          <button mat-flat-button type="submit" [disabled]="saving()">
-            {{ saving() ? 'Guardando...' : 'Guardar' }}
-          </button>
+          @if (auth.esAdmin()) {
+            <button mat-flat-button type="submit" [disabled]="saving()">
+              {{ saving() ? 'Guardando...' : 'Guardar' }}
+            </button>
+          }
         </div>
       </form>
     </mat-card-content>

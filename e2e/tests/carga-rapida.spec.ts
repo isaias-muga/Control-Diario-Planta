@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '../fixtures';
 import { crearProveedor, loginYEsperarResumen, rellenar, ticketUnico } from '../helpers';
 
 test.use({ viewport: { width: 390, height: 844 } });
@@ -192,6 +192,29 @@ test('carga rápida: a retry that gets 409 says it was probably saved', async ({
   ).toBeVisible();
   await expect(page.getByText('Ese ticket ya fue cargado')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Reintentar' })).toHaveCount(0);
+});
+
+test('carga rápida: while the proveedores load there is a placeholder, not a select that ignores the tap', async ({ page }) => {
+  // Regression of the CI failure of PR #4: a click on the still empty select did nothing, in silence
+  let liberar!: () => void;
+  const llegaron = new Promise<void>((resolve) => (liberar = resolve));
+  await page.route('**/api/Proveedores/opciones', async (route) => {
+    await llegaron;
+    await route.continue();
+  });
+  const proveedor = await crearProveedor(page);
+
+  await abrirCargaRapida(page);
+
+  const campo = page.getByLabel('Proveedor');
+  await expect(campo).toBeDisabled();
+  await expect(campo).toHaveValue('Cargando proveedores…');
+  await expect(page.getByRole('combobox', { name: /Proveedor/ })).toHaveCount(0);
+
+  liberar();
+  await page.getByRole('combobox', { name: /Proveedor/ }).click();
+  await page.getByRole('option', { name: proveedor }).click();
+  await expect(page.getByRole('combobox', { name: /Proveedor/ })).toContainText(proveedor);
 });
 
 test('carga rápida: the two-column step 1 with every error visible does not scroll horizontally at 390px', async ({ page }) => {

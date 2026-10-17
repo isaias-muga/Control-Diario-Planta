@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -11,6 +11,8 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
+    <!-- Only the PasswordHasher (PBKDF2) of ASP.NET Core Identity, not the whole of Identity -->
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.12" />
     <!-- Microsoft.Data.SqlClient brings 9.0.11, which has known DoS advisories (CVE-2026-84008, CVE-2026-70162); 10.0.13 is the first patched version. Remove when SqlClient depends on a patched one. -->
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
   </ItemGroup>

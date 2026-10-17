@@ -1,4 +1,6 @@
 using DairyControl.Application.Queries;
+using DairyControl.Application.Seguridad;
+using DairyControl.Infrastructure.Security;
 using DairyControl.Domain.Interfaces;
 using DairyControl.Infrastructure.Persistence;
 using DairyControl.Infrastructure.Persistence.Queries;
@@ -26,6 +28,10 @@ public static class DependencyInjection
         services.AddScoped<IProveedorQueries, ProveedorQueries>();
         services.AddScoped<IConfiguracionCalidadRepository, ConfiguracionCalidadRepository>();
         services.AddScoped<IRecepcionQueries, RecepcionQueries>();
+        services.AddScoped<IUsuarioRepository, UsuarioRepository>();
+        services.AddScoped<IOperarioRepository, OperarioRepository>();
+        services.AddSingleton<IHasherDePassword, PasswordHasherPbkdf2>();
+        services.AddSingleton<IHasherDePin, PinHasherHmac>();
         return services;
     }
 }

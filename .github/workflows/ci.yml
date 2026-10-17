@@ -68,6 +68,7 @@ jobs:
             echo "MSSQL_SA_PASSWORD=Ci_$(openssl rand -hex 12)_aA1"
             echo "JWT_SIGNING_KEY=$(openssl rand -hex 32)"
             echo "ADMIN_PASSWORD=$(openssl rand -hex 16)"
+            echo "PIN_SECRET=$(openssl rand -hex 32)"
           } > .env
 
       - name: Start the stack
@@ -92,6 +93,14 @@ jobs:
         working-directory: e2e
         run: npx playwright test
 
+      # The race detector: CI is slower than a developer machine, and a test that acts on a control before its data has arrived passes by
+      # luck. Every /api response is delayed; add here the specs of any flow that loads data when its page opens (see CLAUDE.md, E2E tests).
+      - name: Run the data-loading flows with a slow API
+        working-directory: e2e
+        env:
+          E2E_API_LATENCY_MS: "400"
+        run: npx playwright test carga-rapida roles
+
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v7
@@ -100,9 +109,15 @@ jobs:
           path: e2e/playwright-report
           retention-days: 7
 
+      # The API warnings and errors first (the full logs are long), then everything, folded
       - name: Compose logs
         if: failure()
-        run: docker compose logs --no-color
+        run: |
+          echo "=== api: warnings, errors and exceptions ==="
+          docker compose logs --no-color api | grep -E "(warn|fail|crit):|Exception" -A4 || echo "(none)"
+          echo "::group::Full compose logs"
+          docker compose logs --no-color
+          echo "::endgroup::"
 
       - name: Stop the stack
         if: always()

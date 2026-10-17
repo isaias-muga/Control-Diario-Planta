@@ -1,0 +1,20 @@
+:host {
+  display: block;
+}
+
+.inicio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100dvh - 32px);
+}
+
+.cargar {
+  width: min(100%, 360px);
+  min-height: 160px;
+  border-radius: 28px;
+  font-size: 1.75rem;
+  font-weight: 600;
+  --mat-button-filled-container-height: 160px;
+  --mat-button-filled-container-shape: 28px;
+}

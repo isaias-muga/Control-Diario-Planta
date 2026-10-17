@@ -10,8 +10,16 @@ namespace DairyControl.Domain.Entities
         public Guid Id { get; private set; }
         public string Nombre { get; private set; } = null!;
 
-        public static Proveedor Crear(string nombre)
+        /// <summary>Who created it (another aggregate, by id). Null for rows that existed before users did.</summary>
+        public Guid? CreadoPorUsuarioId { get; private set; }
+
+        public static Proveedor Crear(string nombre, Guid creadoPorUsuarioId)
         {
+            if (creadoPorUsuarioId == Guid.Empty)
+            {
+                throw new ReglaDeNegocioException("El usuario que crea el proveedor es obligatorio.", nameof(creadoPorUsuarioId));
+            }
+
             if (string.IsNullOrWhiteSpace(nombre))
             {
                 throw new ReglaDeNegocioException("El nombre del proveedor no puede estar vacío.", nameof(nombre));
@@ -26,7 +34,8 @@ namespace DairyControl.Domain.Entities
             return new Proveedor()
             {
                 Id = Guid.NewGuid(),
-                Nombre = nombreTrim
+                Nombre = nombreTrim,
+                CreadoPorUsuarioId = creadoPorUsuarioId
             };
 
 
