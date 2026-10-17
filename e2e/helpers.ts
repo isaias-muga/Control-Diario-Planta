@@ -66,37 +66,54 @@ export interface ValoresRecepcion {
   acidez: number | string;
   temperatura: number | string;
   ticket?: number | string;
+  /** The silo button to press (1..N); 1 when not given. */
+  silo?: number;
 }
 
 /**
- * Opens the registration dialog of a proveedor's detail page and waits until the dialog has put the focus on
- * Litros (its initial focus). Material moves the focus after the opening animation: typing into a field before
- * that can land in the field that receives the focus.
+ * Opens the 3-step registration flow from a proveedor's detail page ("Registrar recepción"): the proveedor is already chosen. Waits until
+ * the page is really ready (the proveedor chosen, the silo buttons there): they only exist once the data has arrived, and acting on the
+ * page before that is a race that CI, which is slower than a developer machine, loses.
  */
-export async function abrirRegistro(page: Page): Promise<Locator> {
-  await page.getByRole('button', { name: 'Registrar recepción' }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByLabel(/^Litros/)).toBeFocused();
-  return dialog;
+export async function abrirRegistro(page: Page): Promise<void> {
+  await page.getByRole('link', { name: 'Registrar recepción' }).click();
+  await expect(page.getByRole('heading', { name: 'Nueva recepción' })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: /Proveedor/ })).toContainText(/\S/);
+  await expect(page.getByRole('radio', { name: '1', exact: true })).toBeVisible();
 }
 
-/** Cancelar on a form that has data asks first: confirm the discard and wait until the dialog is gone. */
-export async function descartarRegistro(page: Page): Promise<void> {
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar' }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Descartar' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+/** Fills step 1 (the proveedor is already chosen or the caller chose it): the readings, the silo and the ticket (a unique one when not given). */
+export async function llenarRecepcion(page: Page, valores: ValoresRecepcion): Promise<void> {
+  await rellenar(page.getByLabel(/^Litros/), String(valores.litros));
+  await rellenar(page.getByLabel(/^Acidez/), String(valores.acidez));
+  await rellenar(page.getByLabel(/^Temp/), String(valores.temperatura));
+  await page.getByRole('radio', { name: String(valores.silo ?? 1), exact: true }).click();
+  await rellenar(page.getByLabel(/^Ticket/), String(valores.ticket ?? ticketUnico()));
 }
 
-/** Opens the registration dialog on a proveedor's detail page, fills it and presses "Registrar". */
+/** Step 1 -> step 2 ("Revisar datos"). */
+export async function revisarDatos(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Revisar datos' }).click();
+}
+
+/** Step 2 -> step 3 ("Confirmar") and waits for the success screen. */
+export async function confirmarRecepcion(page: Page): Promise<void> {
+  await expect(page.getByRole('heading', { name: '¿Son correctos estos datos?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Confirmar' }).click();
+  await expect(page.getByRole('heading', { name: 'Recepción guardada' })).toBeVisible();
+}
+
+/**
+ * Registers a recepción through the 3-step flow, starting on a proveedor's detail page, and comes back to that page (so the callers can
+ * look at the proveedor's list). The silo is 1 and the ticket a unique one unless given.
+ */
 export async function registrarRecepcion(page: Page, valores: ValoresRecepcion): Promise<void> {
-  const dialog = await abrirRegistro(page);
-  await rellenar(dialog.getByLabel(/^Litros/), String(valores.litros));
-  await rellenar(dialog.getByLabel(/^Acidez/), String(valores.acidez));
-  await rellenar(dialog.getByLabel(/^Temperatura/), String(valores.temperatura));
-  if (valores.ticket !== undefined) {
-    await rellenar(dialog.getByLabel(/^Ticket/), String(valores.ticket));
-  }
-  await dialog.getByRole('button', { name: 'Registrar', exact: true }).click();
+  const paginaDelProveedor = page.url();
+  await abrirRegistro(page);
+  await llenarRecepcion(page, valores);
+  await revisarDatos(page);
+  await confirmarRecepcion(page);
+  await page.goto(paginaDelProveedor);
 }
 
 /** Default acidez máxima (LimitesCalidad.Predeterminados). Tests that change it restore this value. */
@@ -148,6 +165,7 @@ export async function cambiarAcidezMaximaPorApi(request: APIRequestContext, acid
       acidezMaxima,
       temperaturaMaxima: actuales.temperaturaMaxima,
       aguaMaxima: actuales.aguaMaxima,
+      cantidadSilos: actuales.cantidadSilos,
       version: actuales.version,
     },
   });
@@ -168,6 +186,7 @@ export async function restaurarAcidezMaxima(request: APIRequestContext): Promise
       acidezMaxima: ACIDEZ_MAXIMA_PREDETERMINADA,
       temperaturaMaxima: actuales.temperaturaMaxima,
       aguaMaxima: actuales.aguaMaxima,
+      cantidadSilos: actuales.cantidadSilos,
       version: actuales.version,
     },
   });
@@ -243,4 +262,22 @@ export async function loginComo(page: Page, persona: PersonaDePrueba, password =
   await login(page, password, persona.username);
   // Wait for the session to be stored: leaving the login page is the sign that the token arrived
   await expect(page).not.toHaveURL(/\/login/);
+}
+
+/** Sets the number of silos through the API (like an Admin saving Configuración), keeping the quality limits as they are. */
+export async function cambiarCantidadSilosPorApi(request: APIRequestContext, cantidadSilos: number): Promise<void> {
+  const headers = await cabecerasAutenticadas(request);
+  const actuales = await (await request.get('/api/Configuracion/calidad', { headers })).json();
+  const guardado = await request.put('/api/Configuracion/calidad', {
+    headers,
+    data: {
+      acidezMaxima: actuales.acidezMaxima,
+      temperaturaMaxima: actuales.temperaturaMaxima,
+      aguaMaxima: actuales.aguaMaxima,
+      cantidadSilos,
+      version: actuales.version,
+    },
+  });
+  expect(guardado.status()).toBe(200);
+  expect((await guardado.json()).cantidadSilos).toBe(cantidadSilos);
 }

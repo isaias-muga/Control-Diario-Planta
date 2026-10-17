@@ -16,6 +16,9 @@ namespace DairyControl.Application.DTOs
         public int? Silo { get; set; }
         public string? Observaciones { get; set; }
 
+        /// <summary>Who loaded it: the operario when a PIN identified one, otherwise the user. Null for rows from before users existed.</summary>
+        public string? RegistradoPor { get; set; }
+
         // Why the recepción is out of range (see MotivosFueraDeRango); empty when it is within the limits.
         public List<string> Motivos { get; set; } = [];
     }

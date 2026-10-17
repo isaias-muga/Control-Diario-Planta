@@ -134,6 +134,7 @@ namespace DairyControl.Infrastructure.Persistence.Queries
             {
                 filas.RemoveAt(filas.Count - 1);
             }
+            var quienCargo = await QuienCargoAsync(filas.Select(f => f.Id).ToList());
 
             var totales = await recepciones
                 .GroupBy(x => 1)
@@ -154,7 +155,12 @@ namespace DairyControl.Infrastructure.Persistence.Queries
 
             return new ListadoRecepcionesDto
             {
-                Items = filas.Select(f => AItem(f, motivosDe)).ToList(),
+                Items = filas.Select(f =>
+                {
+                    var item = AItem(f, motivosDe);
+                    item.RegistradoPor = quienCargo.GetValueOrDefault(f.Id);
+                    return item;
+                }).ToList(),
                 Totales = totales,
                 Dias = await SubtotalesDeDiasAsync(recepciones, fueraDeRango, filas),
                 Pagina = filtro.Pagina,
@@ -206,6 +212,39 @@ namespace DairyControl.Infrastructure.Persistence.Queries
                 }
                 return motivos;
             };
+        }
+
+        // Who loaded each recepción of the page, from the audit columns: three small reads by id, never a join in the list query.
+        private async Task<Dictionary<Guid, string>> QuienCargoAsync(List<Guid> ids)
+        {
+            if (ids.Count == 0)
+            {
+                return [];
+            }
+            var auditoria = await _context.Recepciones.AsNoTracking()
+                .Where(r => ids.Contains(r.Id) && r.RegistradoPorUsuarioId != null)
+                .Select(r => new { r.Id, r.RegistradoPorUsuarioId, r.OperarioId })
+                .ToListAsync();
+            var usuarioIds = auditoria.Select(a => a.RegistradoPorUsuarioId!.Value).Distinct().ToList();
+            var operarioIds = auditoria.Where(a => a.OperarioId != null).Select(a => a.OperarioId!.Value).Distinct().ToList();
+            var usuarios = await _context.Usuarios.AsNoTracking().Where(u => usuarioIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Nombre);
+            var operarios = operarioIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _context.Operarios.AsNoTracking().Where(o => operarioIds.Contains(o.Id)).ToDictionaryAsync(o => o.Id, o => o.Nombre);
+
+            var resultado = new Dictionary<Guid, string>();
+            foreach (var a in auditoria)
+            {
+                if (a.OperarioId is Guid operarioId && operarios.TryGetValue(operarioId, out var operario))
+                {
+                    resultado[a.Id] = operario;
+                }
+                else if (usuarios.TryGetValue(a.RegistradoPorUsuarioId!.Value, out var usuario))
+                {
+                    resultado[a.Id] = usuario;
+                }
+            }
+            return resultado;
         }
 
         private static RecepcionListadoDto AItem(FilaListado fila, Func<FilaListado, List<string>> motivosDe)

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '../fixtures';
-import { crearProveedor, loginYEsperarResumen, rellenar, ticketUnico } from '../helpers';
+import { cambiarCantidadSilosPorApi, crearProveedor, loginYEsperarResumen, rellenar, ticketUnico } from '../helpers';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
@@ -13,6 +13,7 @@ interface Carga {
   litros?: string;
   acidez?: string;
   temperatura?: string;
+  silo?: number;
 }
 
 async function sinScrollHorizontal(page: Page): Promise<void> {
@@ -23,11 +24,12 @@ async function sinScrollHorizontal(page: Page): Promise<void> {
   expect(medidas.contenido).toBeLessThanOrEqual(medidas.ventana);
 }
 
-/** Opens the quick flow from the Recepciones page. */
+/** Opens the registration flow from the Recepciones page ("+ Registrar recepción"), once the silo buttons are there. */
 async function abrirCargaRapida(page: Page): Promise<void> {
   await page.getByRole('link', { name: 'Recepciones', exact: true }).click();
-  await page.getByRole('link', { name: 'Carga rápida' }).click();
+  await page.getByRole('link', { name: '+ Registrar recepción' }).click();
   await expect(page.getByRole('heading', { name: 'Nueva recepción' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: '1', exact: true })).toBeVisible();
 }
 
 /** Fills step 1 (the proveedor is chosen from the list; the ticket replaces the suggested one). */
@@ -38,6 +40,7 @@ async function llenar(page: Page, c: Carga): Promise<void> {
   await rellenar(page.getByLabel(/^Litros/), c.litros ?? '1500');
   await rellenar(page.getByLabel(/^Acidez/), c.acidez ?? '16');
   await rellenar(page.getByLabel(/^Temp/), c.temperatura ?? '5');
+  await page.getByRole('radio', { name: String(c.silo ?? 1), exact: true }).click();
 }
 
 async function nuevaCarga(page: Page, c: Partial<Carga> = {}): Promise<Carga> {
@@ -221,19 +224,68 @@ test('carga rápida: the two-column step 1 with every error visible does not scr
   await abrirCargaRapida(page);
   await page.getByLabel(/^Ticket/).fill('');
   await rellenar(page.getByLabel(/^Grasa/), '99');
-  await rellenar(page.getByLabel(/^Silo/), '99');
   await rellenar(page.getByLabel(/^Agua/), '999');
 
   await page.getByRole('button', { name: 'Revisar datos' }).click();
 
-  await expect(page.getByText('Entero entre 1 y 20.')).toBeVisible();
+  await expect(page.getByText('Entre 1 y 10 %.')).toBeVisible();
+  await expect(page.getByText('Elegí el silo.')).toBeVisible();
   await expect(page.getByText('Requerido. Entero entre 1 y 2.147.483.647.')).toBeVisible();
   await sinScrollHorizontal(page);
 });
 
-test('carga rápida: step 1 fits the 1366px desktop without horizontal scroll', async ({ page }) => {
+test('carga rápida: the silo is chosen with large buttons 1..N and is required', async ({ page }) => {
+  await crearProveedor(page);
+  await abrirCargaRapida(page);
+
+  await expect(page.getByRole('radio')).toHaveCount(3);
+  await expect(page.getByRole('textbox', { name: /^Silo/ })).toHaveCount(0); // no text field
+  const caja = await page.getByRole('radio', { name: '1', exact: true }).boundingBox();
+  expect(caja!.height).toBeGreaterThanOrEqual(48);
+
+  await rellenar(page.getByLabel(/^Litros/), '1000');
+  await rellenar(page.getByLabel(/^Acidez/), '16');
+  await rellenar(page.getByLabel(/^Temp/), '5');
+  await page.getByRole('button', { name: 'Revisar datos' }).click();
+  await expect(page.getByText('Elegí el silo.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Nueva recepción' })).toBeVisible();
+
+  await page.getByRole('radio', { name: '2', exact: true }).click();
+  await expect(page.getByRole('radio', { name: '2', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByText('Elegí el silo.')).toHaveCount(0);
+});
+
+test('carga rápida: from a proveedor\'s page the proveedor is already chosen', async ({ page }) => {
+  const proveedor = await crearProveedor(page);
+
+  await page.getByRole('link', { name: 'Registrar recepción' }).click();
+
+  await expect(page).toHaveURL(/\/recepciones\/carga\?proveedor=/);
+  await expect(page.getByRole('combobox', { name: /Proveedor/ })).toContainText(proveedor);
+});
+
+test('carga rápida: an Admin who changes the number of silos to 4 gets four buttons', async ({ page, request }) => {
+  try {
+    await cambiarCantidadSilosPorApi(request, 4);
+    await crearProveedor(page);
+
+    await abrirCargaRapida(page);
+
+    await expect(page.getByRole('radio')).toHaveCount(4);
+    await expect(page.getByRole('radio', { name: '4', exact: true })).toBeVisible();
+  } finally {
+    await cambiarCantidadSilosPorApi(request, 3);
+  }
+});
+
+test('carga rápida: at 1366px the flow is a centered card of at most 560px, without horizontal scroll', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await nuevaCarga(page);
 
   await sinScrollHorizontal(page);
+  const tarjeta = await page.getByRole('heading', { name: 'Nueva recepción' }).locator('xpath=ancestor::form').boundingBox();
+  expect(tarjeta!.width).toBeLessThanOrEqual(560);
+  expect(tarjeta!.width).toBeGreaterThan(400);
+  const centro = tarjeta!.x + tarjeta!.width / 2;
+  expect(Math.abs(centro - 1366 / 2)).toBeLessThan(40); // centered (a scrollbar may take a few pixels)
 });

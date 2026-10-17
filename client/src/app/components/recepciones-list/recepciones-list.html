@@ -21,7 +21,7 @@
 
     <ng-container matColumnDef="hora">
       <th mat-header-cell *matHeaderCellDef matTooltip="Hora de la recepción" aria-label="Hora de la recepción">Hora</th>
-      <td mat-cell *matCellDef="let f">{{ hora(r(f)) }}</td>
+      <td mat-cell *matCellDef="let f" [matTooltip]="r(f).registradoPor ? 'Cargó ' + r(f).registradoPor : ''">{{ hora(r(f)) }}</td>
     </ng-container>
     <ng-container matColumnDef="ticket">
       <th mat-header-cell class="identificador" *matHeaderCellDef aria-label="Ticket">Ticket</th>

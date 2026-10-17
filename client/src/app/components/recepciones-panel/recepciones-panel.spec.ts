@@ -37,6 +37,7 @@ const recepcion = (cambios: Partial<RecepcionListado>): RecepcionListado => ({
   temperatura: 5.8,
   silo: 1,
   observaciones: null,
+  registradoPor: null,
   motivos: [],
   ...cambios,
 });

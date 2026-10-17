@@ -465,5 +465,48 @@ namespace DairyControl.Infrastructure.Tests
             Assert.Equal(300m, resumen.Totales.LitrosPeriodoAnterior);
             Assert.Equal(0, resumen.Totales.CantidadConGrasa);
         }
+
+        [Fact]
+        public async Task GetListadoAsync_AuditData_ShowsTheOperarioWhoLoadedItOtherwiseTheUser()
+        {
+            // Arrange
+            var proveedor = AgregarProveedor("Tambo A");
+            var operario = DairyControl.Domain.Entities.Operario.Crear("Juan Pérez", "hash-1234");
+            using (var escritura = NuevoContexto())
+            {
+                escritura.Operarios.Add(operario);
+                escritura.Recepciones.Add(RecepcionLeche.Registrar(proveedor.Id, ParametrosCalidad.Create(null, 17m, 5m, 1000m),
+                    new DateTime(2026, 10, 15, 7, 0, 0), Ahora, 1, null, _adminId, operario.Id, Ahora, 1));
+                escritura.SaveChanges();
+            }
+            Registrar(proveedor.Id, new DateTime(2026, 10, 15, 9, 0, 0), 2); // by the admin, no operario
+            using var context = NuevoContexto();
+
+            // Act
+            var listado = await new RecepcionQueries(context).GetListadoAsync(Filtro("2026-10-15", "2026-10-15"));
+
+            // Assert
+            Assert.Equal("Administrador", listado.Items.Single(i => i.Ticket == 2).RegistradoPor);
+            Assert.Equal("Juan Pérez", listado.Items.Single(i => i.Ticket == 1).RegistradoPor);
+        }
+
+        [Fact]
+        public async Task GetListadoAsync_RowFromBeforeUsersExisted_HasNoRegistradoPor()
+        {
+            // Arrange: a row with null audit columns, as the old ones are
+            var proveedor = AgregarProveedor("Tambo A");
+            Registrar(proveedor.Id, new DateTime(2026, 10, 15, 7, 0, 0), 1);
+            using (var escritura = NuevoContexto())
+            {
+                escritura.Database.ExecuteSqlRaw("UPDATE Recepciones SET RegistradoPorUsuarioId = NULL, OperarioId = NULL, RegistradoEn = NULL");
+            }
+            using var context = NuevoContexto();
+
+            // Act
+            var listado = await new RecepcionQueries(context).GetListadoAsync(Filtro("2026-10-15", "2026-10-15"));
+
+            // Assert
+            Assert.Null(Assert.Single(listado.Items).RegistradoPor);
+        }
     }
 }

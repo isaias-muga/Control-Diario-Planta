@@ -14,6 +14,8 @@ export interface RecepcionListado {
   temperatura: number;
   silo: number | null;
   observaciones: string | null;
+  /** Who loaded it (the operario when a PIN identified one, otherwise the user); null for old rows. */
+  registradoPor: string | null;
   motivos: MotivoFueraDeRango[];
 }
 
