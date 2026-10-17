@@ -194,6 +194,20 @@ test('carga rápida: a retry that gets 409 says it was probably saved', async ({
   await expect(page.getByRole('button', { name: 'Reintentar' })).toHaveCount(0);
 });
 
+test('carga rápida: the two-column step 1 with every error visible does not scroll horizontally at 390px', async ({ page }) => {
+  await abrirCargaRapida(page);
+  await page.getByLabel(/^Ticket/).fill('');
+  await rellenar(page.getByLabel(/^Grasa/), '99');
+  await rellenar(page.getByLabel(/^Silo/), '99');
+  await rellenar(page.getByLabel(/^Agua/), '999');
+
+  await page.getByRole('button', { name: 'Revisar datos' }).click();
+
+  await expect(page.getByText('Entero entre 1 y 20.')).toBeVisible();
+  await expect(page.getByText('Requerido. Entero entre 1 y 2.147.483.647.')).toBeVisible();
+  await sinScrollHorizontal(page);
+});
+
 test('carga rápida: step 1 fits the 1366px desktop without horizontal scroll', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await nuevaCarga(page);

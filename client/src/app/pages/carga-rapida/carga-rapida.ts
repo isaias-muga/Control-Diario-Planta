@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   afterNextRender,
@@ -73,6 +74,7 @@ export class CargaRapida {
   private configuracionService = inject(ConfiguracionService);
   private fb = inject(FormBuilder);
   private injector = inject(Injector);
+  private destroyRef = inject(DestroyRef);
 
   readonly observacionesMaxLength = OBSERVACIONES_MAX_LENGTH;
   protected readonly errorNumero = errorNumero;
@@ -144,6 +146,9 @@ export class CargaRapida {
       error: () => this.limites.set(null),
     });
     this.cargarSiguienteTicket();
+    // The help line says "ahora": keep it from going stale while the operator types
+    const reloj = setInterval(() => this.ahora.set(ahoraEnPlanta()), 30_000);
+    this.destroyRef.onDestroy(() => clearInterval(reloj));
   }
 
   protected fueraDeRango(medicion: Medicion): boolean {
