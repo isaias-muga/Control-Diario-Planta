@@ -125,6 +125,8 @@ export class CargaRapida {
   constructor() {
     // The ticket is required here: the operator copies it from the plant's paper ticket
     this.form.controls.ticket.addValidators(Validators.required);
+    // Adding a validator does not run it: without this the empty ticket would be valid until touched
+    this.form.controls.ticket.updateValueAndValidity({ emitEvent: false });
     this.proveedoresService.getAll().subscribe({
       next: (lista) =>
         this.proveedores.set([...lista].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))),
@@ -228,7 +230,8 @@ export class CargaRapida {
           this.form.controls.ticket.markAsTouched();
           this.irA('carga');
         } else if (err.status === 400) {
-          // Nothing was saved and the data has to change
+          // Nothing was saved and the data has to change; the next send is a first send again
+          this.reintento = false;
           this.errorCarga.set(mensaje);
           this.irA('carga');
         } else {

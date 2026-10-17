@@ -3,6 +3,10 @@
     <form class="paso" [formGroup]="form" (ngSubmit)="continuar()" novalidate>
       <h2 #titulo tabindex="-1">Carga rápida</h2>
 
+      @if (errorCarga()) {
+        <p class="error" role="alert">{{ errorCarga() }}</p>
+      }
+
       <mat-form-field appearance="outline">
         <mat-label>Proveedor</mat-label>
         <mat-select id="proveedorId" formControlName="proveedorId">
@@ -78,10 +82,6 @@
         <mat-label>Observaciones (opcional)</mat-label>
         <textarea matInput id="observaciones" rows="3" formControlName="observaciones" [maxlength]="observacionesMaxLength"></textarea>
       </mat-form-field>
-
-      @if (errorCarga()) {
-        <p class="error" role="alert">{{ errorCarga() }}</p>
-      }
 
       <div class="acciones">
         <button mat-flat-button type="submit" class="boton">Continuar</button>

@@ -83,6 +83,15 @@ describe('CargaRapida', () => {
     expect(component.form.controls.ticket.hasError('required')).toBe(true);
   });
 
+  it('requires the ticket even when it was never touched (no suggestion arrived)', () => {
+    cargar({ ticket: null });
+    component.form.controls.ticket.markAsPristine();
+
+    component.continuar();
+
+    expect(component.paso()).toBe('carga');
+  });
+
   it('does not leave the load step while the form is invalid', () => {
     cargar({ acidez: 5 });
 
@@ -249,6 +258,22 @@ describe('CargaRapida', () => {
       expect(texto()).toContain('Es probable que ya se haya guardado. Consultá en la oficina antes de cargarla de nuevo.');
       expect(texto()).not.toContain('Ese ticket ya fue cargado');
       expect(Array.from(el().querySelectorAll('button')).map((b) => b.textContent?.trim())).not.toContain('Reintentar');
+    });
+
+    it('treats a 409 after a retry that was rejected with 400 as a plain duplicate', () => {
+      cargar();
+      component.continuar();
+      enviar();
+      peticionPost().error(new ProgressEvent('error'));
+      enviar();
+      peticionPost().flush({ error: 'Los litros son demasiado altos.' }, { status: 400, statusText: 'Bad Request' });
+      component.continuar();
+
+      enviar();
+      peticionPost().flush({ error: 'El ticket 4981 ya fue usado.' }, { status: 409, statusText: 'Conflict' });
+      fixture.detectChanges();
+
+      expect(texto()).toContain('Ese ticket ya fue cargado. Consultá en la oficina.');
     });
 
     it('treats a 409 after Corregir as a plain duplicate again', () => {
