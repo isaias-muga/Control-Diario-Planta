@@ -20,8 +20,15 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 @media (max-width: 599px) {
-  .encabezado button {
+  .acciones {
+    flex-direction: column;
     width: 100%;
   }
 }

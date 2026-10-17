@@ -86,7 +86,7 @@ Milk reception and quality-control system for a dairy plant. Backend: .NET 10, A
 
 - Standalone components only (no NgModules). Use signals for component state and the built-in control flow (`@if`, `@for`, `@empty`).
 - Folders under `client/src/app`:
-  - `pages/`: routed components (`login`, `resumen`, `recepciones`, `proveedores-list`, `proveedor-detail`, `configuracion`)
+  - `pages/`: routed components (`login`, `resumen`, `recepciones`, `proveedores-list`, `proveedor-detail`, `configuracion`, `carga-rapida`)
   - `components/`: reusable components and dialogs (`recepcion-form`, `registrar-recepcion-dialog`, `confirmar-descarte-dialog`, `crear-proveedor-dialog`, `numero-input` (the `appNumero` directive), `observacion-celda`, `observaciones-dialog`, `recepciones-filtros`, `recepciones-list`, `recepciones-panel`)
   - `services/`: the only place that uses `HttpClient` (`ProveedoresService`, `RecepcionesService`, `ConfiguracionService`, `AuthService`)
   - `models/`: TypeScript interfaces mirroring the API DTOs, plus `limits.ts`
@@ -104,6 +104,8 @@ Milk reception and quality-control system for a dairy plant. Backend: .NET 10, A
 - User-facing text is in Spanish.
 
 ### UI conventions
+
+- Quick reception flow (`/recepciones/carga`, page `carga-rapida`): phone-first, three steps (load, confirm, done) on the same `POST` and the same form definition as the dialog (`crearFormularioRecepcion`); the ticket is required there. Touch targets are at least 48 px. Fecha/hora is fixed when entering the confirmation and sent unchanged, also on a retry. After a network error, a 409 on the retry means "probably already saved" and is never shown as a duplicate ticket. The done step shows the values as entered.
 
 - Styling: each component's styles live in its own CSS file; global styles and theme in `styles.scss`.
 - Form fields: mark optional fields in the label, e.g. "Silo (opcional)"; required fields keep the asterisk. Never use `mat-hint` for "opcional"; hints are only for short help text. Leave room for hints and errors so they never overlap the next field's label (form fields use dynamic subscript sizing from `app.config.ts`, and outline fields have a bottom margin in `styles.scss`).
@@ -171,7 +173,7 @@ Fix small findings in the same PR. For anything bigger, propose a separate issue
 - Client (from `client/`): `npm install`, `ng serve` (http://localhost:4200), `ng build`
 - E2E (from `e2e/`, with the stack running): `npm ci`, `npx playwright install chromium`, `npm test`
 - Full stack in Docker: `docker compose up --build` (http://localhost:8080; needs a `.env` copied from `.env.example`)
-- Deployment: `.github/workflows/deploy.yml` runs after CI passes on `main`: builds both images, pushes them to ghcr.io tagged with the short commit SHA, and updates both Azure container apps. Azure login uses OIDC; no credentials are stored in the repo or the workflow.
+- Deployment: `.github/workflows/deploy.yml` is disabled in this repo until the production instance exists; do not edit, re-enable or run it. When enabled it runs after CI passes on `main`: builds both images, pushes them to ghcr.io tagged with the short commit SHA, and updates both Azure container apps. Azure login uses OIDC; no credentials are stored in the repo or the workflow.
 - Stop the stack and reset the database: `docker compose down -v`
 - Health: `GET /health` on the API (through nginx at http://localhost:8080/health): 200 when the API and the database are reachable, 503 otherwise. See `docs/deployment.md`.
 
@@ -205,7 +207,7 @@ Claude handles branches, commits, pushes and pull requests; the developer review
 - Self-review before every commit: read the full staged diff (`git diff --cached`) and check it against the issue's acceptance criteria, the CLAUDE.md conventions, tests for new behavior, leftover debug code or TODOs, and secrets. Fix what you find before committing.
 - Independent review before the PR: run a fresh subagent that has not seen the implementation conversation. Give it only the issue text, `CLAUDE.md` and `git diff main...HEAD`, and ask for bugs, risks, missing tests and convention breaks, ranked by severity. Fix every real finding (as new commits), then rerun the build, the tests and the visual check.
 - Open the PR when the build, tests, visual check and independent review are done: push the branch (`git push -u origin <branch>`) and open it with `gh pr create`. Title `Feature <N>/<issue title>` (N is the issue number); body with Summary / Changes / Evidence / Self-review / Notes (`.github/pull_request_template.md`) and `Closes #<N>`.
-- PR evidence: screenshots (demo app, synthetic data only; never real plant data) go to the `pr-evidence` branch, folder `pr-<N>/` (here N is the PR number, so publish them after the PR exists). Use a git worktree at `artifacts/wt-evidence` inside the repo (the `artifacts/` folder is git-ignored; never a system temp folder) so the feature branch is not touched, and remove it with `git worktree remove` once the PR body is updated. If `pr-evidence` does not exist, create it as an orphan branch (`git worktree add --orphan -b pr-evidence <dir>`) with a short README saying it is never merged. Embed each image in the PR body by commit SHA: `![<name>](https://raw.githubusercontent.com/isaias-muga/DairyControl/<sha>/pr-<N>/<file>.png)`, then update the body with `gh pr edit <N> --body-file <file>`.
+- PR evidence: screenshots (demo app, synthetic data only; never real plant data) go to the `pr-evidence` branch, folder `pr-<N>/` (here N is the PR number, so publish them after the PR exists). Use a git worktree at `artifacts/wt-evidence` inside the repo (the `artifacts/` folder is git-ignored; never a system temp folder) so the feature branch is not touched, and remove it with `git worktree remove` once the PR body is updated. If `pr-evidence` does not exist, create it as an orphan branch (`git worktree add --orphan -b pr-evidence <dir>`) with a short README saying it is never merged. Embed each image in the PR body by commit SHA: `![<name>](https://github.com/isaias-muga/Control-Diario-Planta/blob/<sha>/pr-<N>/<file>.png?raw=true)` (`raw.githubusercontent.com` links do not render in a private repo; this form does for logged-in collaborators), then update the body with `gh pr edit <N> --body-file <file>`.
 - The PR body has a Self-review section: what the independent review found and how each finding was fixed (or why it was rejected), plus the Exploratory checks results.
 - The PR body has a Notes section that records the process numbers: lead time (issue opened to PR ready), what the independent review, the E2E tests and the Exploratory checks each caught, and the number of review rounds (update it when review rounds happen).
 - Review changes: the developer comments on the PR or tells Claude. Fix them on the same branch, push, and reply with what changed.

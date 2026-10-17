@@ -95,6 +95,15 @@ describe('Recepciones page', () => {
     expect(abrirDialogo).toHaveBeenCalledExactlyOnceWith(expect.anything(), {});
   });
 
+  it('links to the quick reception flow', async () => {
+    await abrir();
+
+    const enlace = el().querySelector('.encabezado a') as HTMLAnchorElement;
+
+    expect(texto('.encabezado a')).toBe('Carga rápida');
+    expect(enlace.getAttribute('href')).toBe('/recepciones/carga');
+  });
+
   it('reloads the list after something was registered', async () => {
     vi.spyOn(RegistrarRecepcionDialog, 'abrir').mockReturnValue(of(true));
     await abrir();

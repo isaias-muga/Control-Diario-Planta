@@ -2,8 +2,7 @@
 
 Milk reception and quality control for a dairy plant, built from the plant's real spreadsheets.
 
-[![CI](https://github.com/isaias-muga/DairyControl/actions/workflows/ci.yml/badge.svg)](https://github.com/isaias-muga/DairyControl/actions/workflows/ci.yml)
-[![Deploy](https://github.com/isaias-muga/DairyControl/actions/workflows/deploy.yml/badge.svg)](https://github.com/isaias-muga/DairyControl/actions/workflows/deploy.yml)
+[![CI](https://github.com/isaias-muga/Control-Diario-Planta/actions/workflows/ci.yml/badge.svg)](https://github.com/isaias-muga/Control-Diario-Planta/actions/workflows/ci.yml)
 
 **.NET 10** · **Clean Architecture + DDD** · **Angular** · **SQL Server** · **Docker** · **Azure Container Apps**
 
@@ -56,6 +55,7 @@ A _proveedor_ is a milk supplier; a _recepción_ is one delivery received at the
 - **Dashboard by period.** Day, week, month or year, or any date range, for all suppliers or one: liters against the previous period, averages, out-of-range count, liters per day, supplier ranking.
 - **Recepciones list.** Daily subtotals, filters by period, supplier, ticket and "out of range only".
 - **es-AR numbers and plant time.** `1.234,5` is read as 1234.5 (ambiguous input is rejected with a message). Dates are shown and validated in Buenos Aires time.
+- **Quick reception flow.** A phone-first screen (load, confirm, done) with big inputs, a full-screen confirmation that highlights values over the limits, and protection against double taps and lost connections.
 - Deliveries are records of what happened: they can be registered, not edited or deleted.
 
 ## Architecture
@@ -167,7 +167,7 @@ Running without Docker (LocalDB, User Secrets, `ng serve`), the commands, the co
 
 ## Status
 
-This public version is frozen as a portfolio. Development continues privately for a production pilot at a dairy plant.
+This is the private production version for the plant pilot; the public portfolio lives in [isaias-muga/DairyControl](https://github.com/isaias-muga/DairyControl).
 
 ## Author
 

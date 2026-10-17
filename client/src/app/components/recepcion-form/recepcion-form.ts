@@ -12,13 +12,7 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
-import {
-  AbstractControl,
-  FormBuilder,
-  ReactiveFormsModule,
-  ValidationErrors,
-  Validators,
-} from '@angular/forms';
+import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { map, startWith } from 'rxjs';
 import { ProveedoresService } from '../../services/proveedores';
@@ -26,24 +20,8 @@ import { RecepcionesService } from '../../services/recepciones';
 import { ConfiguracionService } from '../../services/configuracion';
 import { Proveedor, RegistrarRecepcion } from '../../models/proveedor';
 import { LimitesCalidad } from '../../models/configuracion';
-import {
-  ACIDEZ_MAX,
-  ACIDEZ_MIN,
-  AGUA_MAX_PORCENTAJE,
-  FECHA_ADELANTO_MINUTOS,
-  FECHA_MIN,
-  GRASA_MAX,
-  GRASA_MIN,
-  LITROS_MAX,
-  LITROS_MIN,
-  OBSERVACIONES_MAX_LENGTH,
-  SILO_MAX,
-  SILO_MIN,
-  TEMPERATURA_MAX,
-  TEMPERATURA_MIN,
-  TICKET_MAX,
-  TICKET_MIN,
-} from '../../models/limits';
+import { OBSERVACIONES_MAX_LENGTH } from '../../models/limits';
+import { crearFormularioRecepcion } from './recepcion-form-group';
 import { getApiErrorField, getApiErrorMessage } from '../../utils/api-error';
 import { litrosReales, motivosFueraDeRango } from '../../utils/calidad';
 import { errorNumero } from '../../utils/numero-es';
@@ -55,21 +33,6 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
-
-/** fechaHora must be between FECHA_MIN and the plant's now + FECHA_ADELANTO_MINUTOS (YYYY-MM-DDTHH:mm strings compare in order). */
-function fechaHoraEnRango(control: AbstractControl): ValidationErrors | null {
-  const valor = typeof control.value === 'string' ? control.value.slice(0, 16) : '';
-  if (!valor) {
-    return null; // `required` reports the empty case
-  }
-  if (valor < FECHA_MIN) {
-    return { fechaMin: true };
-  }
-  if (valor > ahoraEnPlanta(new Date(Date.now() + FECHA_ADELANTO_MINUTOS * 60_000))) {
-    return { fechaMax: true };
-  }
-  return null;
-}
 
 @Component({
   selector: 'app-recepcion-form',
@@ -100,36 +63,7 @@ export class RecepcionForm {
 
   readonly observacionesMaxLength = OBSERVACIONES_MAX_LENGTH;
 
-  form = this.fb.group({
-    proveedorId: ['', Validators.required],
-    fechaHora: [ahoraEnPlanta(), [Validators.required, fechaHoraEnRango]],
-    litros: [
-      null as number | null,
-      [Validators.required, Validators.min(LITROS_MIN), Validators.max(LITROS_MAX)],
-    ],
-    grasa: [null as number | null, [Validators.min(GRASA_MIN), Validators.max(GRASA_MAX)]],
-    acidez: [
-      null as number | null,
-      [Validators.required, Validators.min(ACIDEZ_MIN), Validators.max(ACIDEZ_MAX)],
-    ],
-    temperatura: [
-      null as number | null,
-      [Validators.required, Validators.min(TEMPERATURA_MIN), Validators.max(TEMPERATURA_MAX)],
-    ],
-    silo: [
-      null as number | null,
-      [Validators.min(SILO_MIN), Validators.max(SILO_MAX), Validators.pattern(/^\d+$/)],
-    ],
-    aguaPorcentaje: [
-      null as number | null,
-      [Validators.min(0), Validators.max(AGUA_MAX_PORCENTAJE)],
-    ],
-    ticket: [
-      null as number | null,
-      [Validators.min(TICKET_MIN), Validators.max(TICKET_MAX), Validators.pattern(/^\d+$/)],
-    ],
-    observaciones: ['', Validators.maxLength(OBSERVACIONES_MAX_LENGTH)],
-  });
+  form = crearFormularioRecepcion(this.fb);
 
   protected readonly errorNumero = errorNumero;
 
