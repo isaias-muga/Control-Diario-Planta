@@ -54,7 +54,7 @@
   --tabla-padding-vertical: 12px;
   table-layout: fixed;
   width: 100%;
-  min-width: 1000px;
+  min-width: 900px;
 }
 
 th.mat-mdc-header-cell,
