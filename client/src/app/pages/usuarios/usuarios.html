@@ -72,11 +72,11 @@
 
     <div class="table-wrapper">
       <table mat-table [dataSource]="operarios()" class="tabla">
-        <ng-container matColumnDef="nombre">
+        <ng-container matColumnDef="opNombre">
           <th mat-header-cell *matHeaderCellDef aria-label="Nombre">Nombre</th>
           <td mat-cell *matCellDef="let o" [matTooltip]="o.nombre">{{ o.nombre }}</td>
         </ng-container>
-        <ng-container matColumnDef="estado">
+        <ng-container matColumnDef="opEstado">
           <th mat-header-cell *matHeaderCellDef aria-label="Estado">Estado</th>
           <td mat-cell *matCellDef="let o">
             @if (o.activo) {
@@ -86,7 +86,7 @@
             }
           </td>
         </ng-container>
-        <ng-container matColumnDef="acciones">
+        <ng-container matColumnDef="opAcciones">
           <th mat-header-cell *matHeaderCellDef aria-label="Acciones">Acciones</th>
           <td mat-cell *matCellDef="let o">
             @if (o.activo) {

@@ -31,7 +31,7 @@ export class Usuarios {
   protected auth = inject(AuthService);
 
   protected readonly columnasUsuarios = ['username', 'nombre', 'rol', 'estado', 'acciones'];
-  protected readonly columnasOperarios = ['nombre', 'estado', 'acciones'];
+  protected readonly columnasOperarios = ['opNombre', 'opEstado', 'opAcciones'];
 
   usuarios = signal<Usuario[]>([]);
   operarios = signal<Operario[]>([]);
