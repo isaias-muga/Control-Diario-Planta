@@ -1,0 +1,93 @@
+:host {
+  display: block;
+}
+
+.seccion {
+  margin-top: 16px;
+  padding: 16px 0 8px;
+}
+
+.encabezado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 0 16px 12px;
+}
+
+.encabezado h3 {
+  margin: 0;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* Always-visible scrollbar for narrow screens (a styled WebKit/Chromium scrollbar does not auto-hide). */
+.table-wrapper::-webkit-scrollbar {
+  height: 12px;
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+  background: var(--mat-sys-surface-container-high);
+  border-radius: 6px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+  background: var(--mat-sys-outline);
+  border-radius: 6px;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .table-wrapper {
+    scrollbar-width: auto;
+    scrollbar-color: var(--mat-sys-outline) var(--mat-sys-surface-container-high);
+  }
+}
+
+/* Fixed layout with percentage widths: it fits the card on desktop and only scrolls horizontally below min-width */
+.tabla {
+  --tabla-padding-borde: 16px;
+  --tabla-padding-celda: 8px;
+  --tabla-padding-vertical: 12px;
+  table-layout: fixed;
+  width: 100%;
+  min-width: 860px;
+}
+
+th.mat-mdc-header-cell,
+td.mat-mdc-cell {
+  box-sizing: border-box;
+  padding: var(--tabla-padding-vertical) var(--tabla-padding-celda);
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+th.mat-mdc-header-cell:first-of-type,
+td.mat-mdc-cell:first-of-type {
+  padding-left: var(--tabla-padding-borde);
+}
+
+th.mat-mdc-header-cell:last-of-type,
+td.mat-mdc-cell:last-of-type {
+  padding-right: var(--tabla-padding-borde);
+}
+
+.mat-column-username { width: 18%; }
+.mat-column-rol { width: 20%; }
+.mat-column-estado { width: 18%; }
+/* .mat-column-nombre takes the rest; the actions column needs room for its buttons */
+.mat-column-acciones { width: 34%; }
+
+.inactivo {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.vacio {
+  text-align: left;
+  color: var(--mat-sys-on-surface-variant);
+}

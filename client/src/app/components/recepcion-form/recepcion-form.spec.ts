@@ -482,7 +482,7 @@ describe('RecepcionForm', () => {
     it('marks the proveedor selector instead when the proveedor must be chosen', async () => {
       const sinProveedor = TestBed.createComponent(RecepcionForm);
       await sinProveedor.whenStable();
-      http.match((r) => r.url.endsWith('/Proveedores'));
+      http.match((r) => r.url.endsWith('/Proveedores/opciones'));
       responderIniciales();
       sinProveedor.detectChanges();
 
@@ -602,7 +602,7 @@ describe('RecepcionForm', () => {
       sinProveedor = TestBed.createComponent(RecepcionForm);
       await sinProveedor.whenStable();
       http
-        .expectOne((r) => r.url.endsWith('/Proveedores'))
+        .expectOne((r) => r.url.endsWith('/Proveedores/opciones'))
         .flush([
           { id: 'b', nombre: 'Tambo San José', cantidadRecepciones: 1 },
           { id: 'a', nombre: 'Tambo Don Pedro', cantidadRecepciones: 2 },

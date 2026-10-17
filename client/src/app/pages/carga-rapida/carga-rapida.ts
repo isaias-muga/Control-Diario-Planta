@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { map, startWith } from 'rxjs';
@@ -22,12 +22,13 @@ import { MatSelectModule } from '@angular/material/select';
 import { crearFormularioRecepcion } from '../../components/recepcion-form/recepcion-form-group';
 import { NumeroInput } from '../../components/numero-input/numero-input';
 import { LimitesCalidad } from '../../models/configuracion';
-import { OBSERVACIONES_MAX_LENGTH } from '../../models/limits';
-import { Proveedor, RegistrarRecepcion } from '../../models/proveedor';
+import { OBSERVACIONES_MAX_LENGTH, PIN_LENGTH } from '../../models/limits';
+import { ProveedorOpcion, RegistrarRecepcion } from '../../models/proveedor';
+import { AuthService } from '../../services/auth';
 import { ConfiguracionService } from '../../services/configuracion';
 import { ProveedoresService } from '../../services/proveedores';
 import { RecepcionesService } from '../../services/recepciones';
-import { getApiErrorMessage } from '../../utils/api-error';
+import { getApiErrorField, getApiErrorMessage } from '../../utils/api-error';
 import { litrosReales, motivosFueraDeRango } from '../../utils/calidad';
 import { errorNumero } from '../../utils/numero-es';
 import { ahoraEnPlanta, formatearFecha } from '../../utils/periodos';
@@ -39,11 +40,12 @@ function textoFechaHora(fechaHora: string): string {
 type Paso = 'carga' | 'confirmar' | 'listo';
 type Medicion = 'acidez' | 'temperatura' | 'agua';
 
-/** What the operator entered and the server accepted; the POST answers with the proveedor only. */
+/** What the server saved, as it answered: the ticket and liters as entered, the proveedor and who identified as the operario. */
 interface Cargada {
-  ticket: number;
+  ticket: number | null;
   litros: number;
   proveedor: string;
+  operario: string | null;
 }
 
 /** Why the last send did not end in a saved recepción and the screen is still on the confirmation. */
@@ -69,6 +71,7 @@ interface Fallo {
   styleUrl: './carga-rapida.css',
 })
 export class CargaRapida {
+  protected auth = inject(AuthService);
   private proveedoresService = inject(ProveedoresService);
   private recepcionesService = inject(RecepcionesService);
   private configuracionService = inject(ConfiguracionService);
@@ -87,7 +90,11 @@ export class CargaRapida {
   errorCarga = signal<string | null>(null);
   fallo = signal<Fallo | null>(null);
   cargada = signal<Cargada | null>(null);
-  proveedores = signal<Proveedor[]>([]);
+  proveedores = signal<ProveedorOpcion[]>([]);
+
+  /** The operario PIN, asked on the confirmation of the reception phone (masked, numeric keyboard). Never kept after a send. */
+  pin = new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(new RegExp(`^\\d{${PIN_LENGTH}}$`))] });
+  protected readonly pinLength = PIN_LENGTH;
   proveedoresError = signal<string | null>(null);
   private limites = signal<LimitesCalidad | null>(null);
   /** True once a send ended without an answer (network, 5xx): the next send is a retry that may duplicate it. */
@@ -134,7 +141,7 @@ export class CargaRapida {
     this.form.controls.ticket.addValidators(Validators.required);
     // Adding a validator does not run it: without this the empty ticket would be valid until touched
     this.form.controls.ticket.updateValueAndValidity({ emitEvent: false });
-    this.proveedoresService.getAll().subscribe({
+    this.proveedoresService.getOpciones().subscribe({
       next: (lista) =>
         this.proveedores.set([...lista].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))),
       error: (err: HttpErrorResponse) =>
@@ -184,6 +191,7 @@ export class CargaRapida {
   corregir(): void {
     this.fallo.set(null);
     this.reintento = false;
+    this.pin.reset();
     this.ahora.set(ahoraEnPlanta());
     this.irA('carga');
   }
@@ -194,6 +202,7 @@ export class CargaRapida {
     this.fallo.set(null);
     this.errorCarga.set(null);
     this.reintento = false;
+    this.pin.reset();
     this.cargarSiguienteTicket();
     this.ahora.set(ahoraEnPlanta());
     this.irA('carga');
@@ -203,6 +212,11 @@ export class CargaRapida {
   enviar(): void {
     // A second tap can arrive before the disabled button is rendered
     if (this.enviando()) {
+      return;
+    }
+    const pideLaClave = this.auth.esRecepcion();
+    if (pideLaClave && this.pin.invalid) {
+      this.pin.markAsTouched();
       return;
     }
     const v = this.form.getRawValue();
@@ -216,14 +230,16 @@ export class CargaRapida {
       aguaPorcentaje: v.aguaPorcentaje,
       ticket: v.ticket,
       observaciones: v.observaciones?.trim() || null,
+      pin: pideLaClave ? this.pin.value : null,
     };
     const eraReintento = this.reintento;
 
     this.enviando.set(true);
     this.fallo.set(null);
     this.proveedoresService.registrarRecepcion(v.proveedorId!, recepcion).subscribe({
-      next: () => {
-        this.cargada.set({ ticket: v.ticket!, litros: v.litros!, proveedor: this.proveedorNombre() });
+      next: (guardada) => {
+        this.pin.reset();
+        this.cargada.set({ ticket: guardada.ticket, litros: guardada.litros, proveedor: guardada.proveedorNombre, operario: guardada.operarioNombre });
         this.reintento = false;
         this.enviando.set(false);
         this.irA('listo');
@@ -231,19 +247,26 @@ export class CargaRapida {
       error: (err: HttpErrorResponse) => {
         this.enviando.set(false);
         const mensaje = getApiErrorMessage(err, 'No se pudo registrar la recepción.');
-        if (err.status === 409 && eraReintento) {
+        if (err.status === 429 || (err.status === 400 && getApiErrorField(err) === 'pin')) {
+          // Nothing was saved: a wrong PIN, or too many wrong ones. The operario types it again on this same screen.
+          this.pin.reset();
+          this.pin.setErrors({ servidor: mensaje });
+          this.pin.markAsTouched();
+        } else if (err.status === 409 && eraReintento) {
           // The first send may have reached the server before the connection failed
           this.fallo.set({
             mensaje: 'Es probable que ya se haya guardado. Consultá en la oficina antes de cargarla de nuevo.',
             puedeReintentar: false,
           });
         } else if (err.status === 409) {
+          this.pin.reset();
           this.errorCarga.set('Ese ticket ya fue cargado. Consultá en la oficina.');
           this.form.controls.ticket.markAsTouched();
           this.irA('carga');
         } else if (err.status === 400) {
           // Nothing was saved and the data has to change; the next send is a first send again
           this.reintento = false;
+          this.pin.reset();
           this.errorCarga.set(mensaje);
           this.irA('carga');
         } else {

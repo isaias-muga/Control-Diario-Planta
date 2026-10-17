@@ -14,8 +14,13 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(request).pipe(
     catchError((error: HttpErrorResponse) => {
-      if (error.status === 401 && token && isApiRequest) {
-        auth.logout();
+      if (token && isApiRequest) {
+        if (error.status === 401) {
+          // Expired, or the user was deactivated or changed the password: the session is over
+          auth.logout();
+        } else if (error.status === 403 && error.error?.code === 'debeCambiarPassword') {
+          auth.marcarDebeCambiarPassword();
+        }
       }
       return throwError(() => error);
     }),

@@ -17,6 +17,7 @@ import {
   TEMPERATURA_LIMITE_MIN,
 } from '../../models/limits';
 import { LimitesCalidad } from '../../models/configuracion';
+import { AuthService } from '../../services/auth';
 import { ConfiguracionService } from '../../services/configuracion';
 import { getApiErrorMessage } from '../../utils/api-error';
 import { errorNumero } from '../../utils/numero-es';
@@ -38,6 +39,7 @@ import { NumeroInput } from '../../components/numero-input/numero-input';
   styleUrl: './configuracion.css',
 })
 export class Configuracion {
+  protected auth = inject(AuthService);
   private configuracionService = inject(ConfiguracionService);
   private fb = inject(FormBuilder);
   private snackBar = inject(MatSnackBar);
@@ -85,6 +87,10 @@ export class Configuracion {
   });
 
   constructor() {
+    // The office reads the limits; only an admin changes them (the API refuses anyone else)
+    if (!this.auth.esAdmin()) {
+      this.form.disable();
+    }
     this.cargar();
   }
 
@@ -110,6 +116,9 @@ export class Configuracion {
   }
 
   guardar(): void {
+    if (!this.auth.esAdmin()) {
+      return;
+    }
     // A second click can arrive before the disabled button is rendered; it would send the version that the first save just replaced and be reported as a conflict
     if (this.saving()) {
       return;

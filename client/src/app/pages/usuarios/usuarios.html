@@ -1,0 +1,107 @@
+<div class="page-header">
+  <h2>Usuarios</h2>
+</div>
+
+@if (loading()) {
+  <div class="state-message">
+    <mat-spinner diameter="32" />
+    <span>Cargando...</span>
+  </div>
+} @else if (error()) {
+  <p class="form-error" role="alert">{{ error() }}</p>
+  <button mat-stroked-button type="button" (click)="cargar()">Reintentar</button>
+} @else {
+  <mat-card class="seccion">
+    <header class="encabezado">
+      <h3>Personas con usuario</h3>
+      <button mat-flat-button type="button" (click)="nuevoUsuario()">Nuevo usuario</button>
+    </header>
+
+    <div class="table-wrapper">
+      <table mat-table [dataSource]="usuarios()" class="tabla">
+        <ng-container matColumnDef="username">
+          <th mat-header-cell *matHeaderCellDef aria-label="Usuario">Usuario</th>
+          <td mat-cell *matCellDef="let u" [matTooltip]="u.username">{{ u.username }}</td>
+        </ng-container>
+        <ng-container matColumnDef="nombre">
+          <th mat-header-cell *matHeaderCellDef aria-label="Nombre">Nombre</th>
+          <td mat-cell *matCellDef="let u" [matTooltip]="u.nombre">{{ u.nombre }}</td>
+        </ng-container>
+        <ng-container matColumnDef="rol">
+          <th mat-header-cell *matHeaderCellDef aria-label="Rol">Rol</th>
+          <td mat-cell *matCellDef="let u">{{ etiqueta(u.rol) }}</td>
+        </ng-container>
+        <ng-container matColumnDef="estado">
+          <th mat-header-cell *matHeaderCellDef aria-label="Estado">Estado</th>
+          <td mat-cell *matCellDef="let u">
+            @if (!u.activo) {
+              <span class="inactivo">Desactivado</span>
+            } @else if (u.debeCambiarPassword) {
+              <span matTooltip="Tiene que elegir su contraseña al entrar">Contraseña pendiente</span>
+            } @else {
+              Activo
+            }
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef aria-label="Acciones">Acciones</th>
+          <td mat-cell *matCellDef="let u">
+            @if (u.activo) {
+              <button mat-button type="button" (click)="restablecerPassword(u)" [attr.aria-label]="'Restablecer la contraseña de ' + u.username">Restablecer contraseña</button>
+              @if (u.id !== auth.id()) {
+                <button mat-button type="button" (click)="desactivarUsuario(u)" [attr.aria-label]="'Desactivar a ' + u.username">Desactivar</button>
+              }
+            }
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="columnasUsuarios"></tr>
+        <tr mat-row *matRowDef="let fila; columns: columnasUsuarios"></tr>
+        <tr class="mat-row" *matNoDataRow>
+          <td class="mat-cell vacio" [attr.colspan]="columnasUsuarios.length">No hay usuarios.</td>
+        </tr>
+      </table>
+    </div>
+  </mat-card>
+
+  <mat-card class="seccion">
+    <header class="encabezado">
+      <h3>Operarios del celular de recepción</h3>
+      <button mat-flat-button type="button" (click)="nuevoOperario()">Nuevo operario</button>
+    </header>
+
+    <div class="table-wrapper">
+      <table mat-table [dataSource]="operarios()" class="tabla">
+        <ng-container matColumnDef="nombre">
+          <th mat-header-cell *matHeaderCellDef aria-label="Nombre">Nombre</th>
+          <td mat-cell *matCellDef="let o" [matTooltip]="o.nombre">{{ o.nombre }}</td>
+        </ng-container>
+        <ng-container matColumnDef="estado">
+          <th mat-header-cell *matHeaderCellDef aria-label="Estado">Estado</th>
+          <td mat-cell *matCellDef="let o">
+            @if (o.activo) {
+              Activo
+            } @else {
+              <span class="inactivo">Desactivado</span>
+            }
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef aria-label="Acciones">Acciones</th>
+          <td mat-cell *matCellDef="let o">
+            @if (o.activo) {
+              <button mat-button type="button" (click)="cambiarPin(o)" [attr.aria-label]="'Cambiar el PIN de ' + o.nombre">Cambiar PIN</button>
+              <button mat-button type="button" (click)="desactivarOperario(o)" [attr.aria-label]="'Desactivar a ' + o.nombre">Desactivar</button>
+            }
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="columnasOperarios"></tr>
+        <tr mat-row *matRowDef="let fila; columns: columnasOperarios"></tr>
+        <tr class="mat-row" *matNoDataRow>
+          <td class="mat-cell vacio" [attr.colspan]="columnasOperarios.length">No hay operarios.</td>
+        </tr>
+      </table>
+    </div>
+  </mat-card>
+}

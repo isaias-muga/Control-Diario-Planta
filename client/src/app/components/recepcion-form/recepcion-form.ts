@@ -18,7 +18,7 @@ import { map, startWith } from 'rxjs';
 import { ProveedoresService } from '../../services/proveedores';
 import { RecepcionesService } from '../../services/recepciones';
 import { ConfiguracionService } from '../../services/configuracion';
-import { Proveedor, RegistrarRecepcion } from '../../models/proveedor';
+import { ProveedorOpcion, RegistrarRecepcion } from '../../models/proveedor';
 import { LimitesCalidad } from '../../models/configuracion';
 import { OBSERVACIONES_MAX_LENGTH } from '../../models/limits';
 import { crearFormularioRecepcion } from './recepcion-form-group';
@@ -70,7 +70,7 @@ export class RecepcionForm {
   saving = signal(false);
   saveError = signal<string | null>(null);
 
-  proveedores = signal<Proveedor[]>([]);
+  proveedores = signal<ProveedorOpcion[]>([]);
   proveedoresError = signal<string | null>(null);
   /** True while the ticket field still holds the number the API suggested (it can be edited). */
   ticketSugerido = signal(false);
@@ -240,7 +240,7 @@ export class RecepcionForm {
       return;
     }
     this.proveedoresCargados = true;
-    this.proveedoresService.getAll().subscribe({
+    this.proveedoresService.getOpciones().subscribe({
       next: (proveedores) =>
         this.proveedores.set([...proveedores].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))),
       error: (err: HttpErrorResponse) =>

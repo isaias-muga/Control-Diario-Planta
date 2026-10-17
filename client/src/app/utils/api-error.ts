@@ -10,8 +10,8 @@ export function getApiErrorMessage(err: HttpErrorResponse, fallback: string): st
     return 'No se pudo conectar con el servidor.';
   }
 
-  if (err.status === 409 && typeof err.error?.error === 'string') {
-    // Conflict (e.g. duplicate ticket), from ExceptionHandlingMiddleware: { error: "..." }
+  if ((err.status === 409 || err.status === 429 || err.status === 403) && typeof err.error?.error === 'string') {
+    // Conflict (e.g. duplicate ticket), too many attempts or not allowed, from the API: { error: "..." }
     return err.error.error;
   }
 

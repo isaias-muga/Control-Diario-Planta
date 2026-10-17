@@ -4,6 +4,8 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Configuracion } from './configuracion';
 import { LimitesCalidad } from '../../models/configuracion';
+import { cerrarSesionDePrueba, iniciarSesionDePrueba } from '../../testing/sesion';
+import { Rol } from '../../utils/jwt';
 
 const limites: LimitesCalidad = {
   acidezMaxima: 19,
@@ -20,7 +22,8 @@ describe('Configuracion', () => {
 
   const esCalidad = (r: { url: string }) => r.url.endsWith('/Configuracion/calidad');
 
-  async function setup(): Promise<void> {
+  async function setup(rol: Rol = 'Admin'): Promise<void> {
+    iniciarSesionDePrueba(rol);
     await TestBed.configureTestingModule({
       imports: [Configuracion],
       providers: [provideHttpClient(), provideHttpClientTesting()],
@@ -37,7 +40,10 @@ describe('Configuracion', () => {
     fixture.detectChanges();
   }
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.verify();
+    cerrarSesionDePrueba();
+  });
 
   it('loads the current limits into the form and shows the last modification', async () => {
     await setup();
@@ -241,5 +247,26 @@ describe('Configuracion', () => {
     http.expectOne(esCalidad).flush({ ...limites, actualizadoEn: '2026-10-01T00:00:00' });
 
     expect(component.ultimaModificacion()).toBe('2026-10-01T00:00:00Z');
+  });
+
+  describe('for the office (read only)', () => {
+    it('shows the limits but offers no way to change them', async () => {
+      await setup('Oficina');
+      await cargarLimites();
+
+      const texto = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(component.form.disabled).toBe(true);
+      expect(texto).toContain('Solo un administrador puede cambiar los límites.');
+      expect(Array.from(fixture.nativeElement.querySelectorAll('button')).map((b) => (b as HTMLElement).textContent?.trim())).not.toContain('Guardar');
+    });
+
+    it('never sends a save, even if the form is submitted', async () => {
+      await setup('Oficina');
+      await cargarLimites();
+
+      component.guardar();
+
+      http.expectNone((r) => r.method === 'PUT');
+    });
   });
 });

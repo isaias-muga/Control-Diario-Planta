@@ -12,9 +12,11 @@
 } @else if (proveedor(); as p) {
   <div class="page-header">
     <h2>{{ p.nombre }}</h2>
-    <button mat-flat-button type="button" (click)="abrirRegistro(p.id)">
-      Registrar recepción
-    </button>
+    @if (auth.esAdmin()) {
+      <button mat-flat-button type="button" (click)="abrirRegistro(p.id)">
+        Registrar recepción
+      </button>
+    }
   </div>
 
   <h3>Recepciones</h3>

@@ -7,8 +7,7 @@
   border-bottom: 1px solid var(--mat-sys-outline-variant);
 }
 
-.nav-link.active,
-.config.active {
+.nav-link.active {
   background: var(--mat-sys-secondary-container);
   color: var(--mat-sys-on-secondary-container);
   border-radius: 999px;
