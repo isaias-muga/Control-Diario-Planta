@@ -1,5 +1,6 @@
 using DairyControl.Application.DTOs;
 using DairyControl.Application.Queries;
+using DairyControl.Application.Seguridad;
 using DairyControl.Domain.Entities;
 using DairyControl.Domain.Exceptions;
 using DairyControl.Domain.Interfaces;
@@ -13,10 +14,15 @@ namespace DairyControl.Application.Services
         private readonly IProveedorRepository _proveedores;
         private readonly IRecepcionRepository _recepciones;
         private readonly IProveedorQueries _queries;
+        private readonly IUsuarioActual _actual;
+        private readonly VerificacionPinService _pin;
         private readonly TimeProvider _reloj;
 
-        public ProveedorAppService(IProveedorRepository proveedores, IRecepcionRepository recepciones, IProveedorQueries queries, TimeProvider reloj)
+        public ProveedorAppService(IProveedorRepository proveedores, IRecepcionRepository recepciones, IProveedorQueries queries,
+            IUsuarioActual actual, VerificacionPinService pin, TimeProvider reloj)
         {
+            _actual = actual;
+            _pin = pin;
             _proveedores = proveedores;
             _recepciones = recepciones;
             _queries = queries;
@@ -25,7 +31,7 @@ namespace DairyControl.Application.Services
 
         public async Task<ProveedorDto> CrearAsync(CrearProveedorDto dto)
         {
-            var proveedor = Proveedor.Crear(dto.Nombre);
+            var proveedor = Proveedor.Crear(dto.Nombre, UsuarioActualId());
             await _proveedores.AddAsync(proveedor);
 
             return new ProveedorDto
@@ -40,10 +46,22 @@ namespace DairyControl.Application.Services
 
         public Task<IReadOnlyList<ProveedorDto>> GetAllAsync() => _queries.GetAllAsync();
 
-        public async Task<ProveedorDto?> RegistrarRecepcionAsync(Guid proveedorId, RegistrarRecepcionDto dto)
+        /// <summary>Id and name only, for choosing a proveedor (the reception phone gets no counts).</summary>
+        public async Task<IReadOnlyList<ProveedorOpcionDto>> GetOpcionesAsync()
         {
-            if (!await _proveedores.ExistsAsync(proveedorId))
+            var proveedores = await _proveedores.GetAllAsync();
+            return proveedores.Select(p => new ProveedorOpcionDto { Id = p.Id, Nombre = p.Nombre }).ToList();
+        }
+
+        public async Task<RecepcionRegistradaDto?> RegistrarRecepcionAsync(Guid proveedorId, RegistrarRecepcionDto dto)
+        {
+            var proveedor = await _proveedores.GetByIdAsync(proveedorId);
+            if (proveedor is null)
                 return null;
+
+            // The audit data comes from the token and the PIN, never from the request body
+            var usuarioId = UsuarioActualId();
+            var operario = await _pin.ResolverAsync(dto.Pin);
 
             var parametros = ParametrosCalidad.Create(dto.Grasa, dto.Acidez, dto.Temperatura, dto.Litros, dto.AguaPorcentaje);
 
@@ -57,7 +75,8 @@ namespace DairyControl.Application.Services
             }
 
             // A missing date becomes default(DateTime), which the domain rejects.
-            var recepcion = RecepcionLeche.Registrar(proveedorId, parametros, HoraPlanta.ALaPlanta(dto.FechaHora.GetValueOrDefault()), HoraPlanta.Ahora(_reloj), dto.Silo, dto.Observaciones, dto.Ticket);
+            var recepcion = RecepcionLeche.Registrar(proveedorId, parametros, HoraPlanta.ALaPlanta(dto.FechaHora.GetValueOrDefault()), HoraPlanta.Ahora(_reloj), dto.Silo, dto.Observaciones,
+                usuarioId, operario?.Id, _reloj.GetUtcNow().UtcDateTime, dto.Ticket);
 
             try
             {
@@ -70,9 +89,18 @@ namespace DairyControl.Application.Services
                 throw new TicketDuplicadoException(MensajeTicketDuplicado(ticket.Value, existente));
             }
 
-            // The count comes from the database; no recepción is loaded.
-            return await _queries.GetByIdAsync(proveedorId);
+            return new RecepcionRegistradaDto
+            {
+                Id = recepcion.Id,
+                Ticket = recepcion.Ticket,
+                Litros = recepcion.Parametros.Litros,
+                ProveedorNombre = proveedor.Nombre,
+                OperarioNombre = operario?.Nombre
+            };
         }
+
+        private Guid UsuarioActualId() =>
+            _actual.Id ?? throw new InvalidOperationException("No hay un usuario autenticado en la solicitud.");
 
         private static string MensajeTicketDuplicado(int ticket, TicketRegistrado? existente) =>
             existente is null

@@ -11,5 +11,8 @@
         public string? Observaciones { get; set; }
         public decimal? AguaPorcentaje { get; set; }
         public int? Ticket { get; set; }
+
+        /// <summary>The operario PIN; required when the reception phone registers, ignored for other roles.</summary>
+        public string? Pin { get; set; }
     }
 }

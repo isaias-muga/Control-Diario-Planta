@@ -1,7 +1,9 @@
-﻿using DairyControl.Application.DTOs;
+using DairyControl.Application.DTOs;
 using DairyControl.Application.Queries;
+using DairyControl.Application.Seguridad;
 using DairyControl.Application.Services;
 using DairyControl.Domain.Entities;
+using DairyControl.Domain.Enums;
 using DairyControl.Domain.Exceptions;
 using DairyControl.Domain.Interfaces;
 using DairyControl.Domain.ValueObjects;
@@ -20,16 +22,26 @@ namespace DairyControl.Application.Tests
             public Mock<IProveedorRepository> Proveedores { get; } = new();
             public Mock<IRecepcionRepository> Recepciones { get; } = new();
             public Mock<IProveedorQueries> Queries { get; } = new();
+            public Mock<IUsuarioActual> Actual { get; } = new();
+            public Mock<IUsuarioRepository> Usuarios { get; } = new();
+            public Mock<IOperarioRepository> Operarios { get; } = new();
+            public Mock<IHasherDePin> HasherPin { get; } = new();
             public Guid ProveedorId { get; } = Guid.NewGuid();
+            public Guid UsuarioId { get; } = Guid.NewGuid();
 
-            public Escenario(bool proveedorExiste = true, int cantidad = 1)
+            public Escenario(bool proveedorExiste = true, int cantidad = 1, RolUsuario rol = RolUsuario.Admin)
             {
-                Proveedores.Setup(r => r.ExistsAsync(ProveedorId)).ReturnsAsync(proveedorExiste);
+                Actual.Setup(a => a.Id).Returns(UsuarioId);
+                Actual.Setup(a => a.Rol).Returns(rol);
+                HasherPin.Setup(h => h.Hash(It.IsAny<string>())).Returns<string>(pin => "hash-" + pin);
+                Proveedores.Setup(r => r.GetByIdAsync(ProveedorId))
+                    .ReturnsAsync(proveedorExiste ? Proveedor.Crear("Proveedor Test", Guid.NewGuid()) : null);
                 Queries.Setup(q => q.GetByIdAsync(ProveedorId))
                     .ReturnsAsync(new ProveedorDto { Id = ProveedorId, Nombre = "Proveedor Test", CantidadRecepciones = cantidad });
             }
 
-            public ProveedorAppService Servicio() => new(Proveedores.Object, Recepciones.Object, Queries.Object, Reloj);
+            public ProveedorAppService Servicio() => new(Proveedores.Object, Recepciones.Object, Queries.Object, Actual.Object,
+                new VerificacionPinService(Usuarios.Object, Operarios.Object, HasherPin.Object, Actual.Object, Reloj), Reloj);
 
             public void VerificarNadaGuardado() =>
                 Recepciones.Verify(r => r.AddAsync(It.IsAny<RecepcionLeche>()), Times.Never);
@@ -107,7 +119,7 @@ namespace DairyControl.Application.Tests
             // Assert
             Assert.Equal("Proveedor Test", result.Nombre);
             Assert.Equal(0, result.CantidadRecepciones);
-            escenario.Proveedores.Verify(r => r.AddAsync(It.IsAny<Proveedor>()), Times.Once);
+            escenario.Proveedores.Verify(r => r.AddAsync(It.Is<Proveedor>(p => p.CreadoPorUsuarioId == escenario.UsuarioId)), Times.Once);
         }
 
         [Fact]
@@ -126,7 +138,7 @@ namespace DairyControl.Application.Tests
         }
 
         [Fact]
-        public async Task RegistrarRecepcionAsync_ProveedorExists_AddsOneRecepcionAndReturnsTheCount()
+        public async Task RegistrarRecepcionAsync_ProveedorExists_AddsOneRecepcionAndReturnsWhatWasSaved()
         {
             // Arrange
             var escenario = new Escenario(cantidad: 5);
@@ -143,12 +155,95 @@ namespace DairyControl.Application.Tests
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(5, result.CantidadRecepciones);
             Assert.NotNull(agregada);
+            Assert.Equal(agregada.Id, result.Id);
+            Assert.Equal(1000m, result.Litros);
+            Assert.Equal("Proveedor Test", result.ProveedorNombre);
+            Assert.Null(result.OperarioNombre);
             Assert.Equal(escenario.ProveedorId, agregada.ProveedorId);
             Assert.Equal("Observación de prueba", agregada.Observaciones);
             escenario.Recepciones.Verify(r => r.AddAsync(It.IsAny<RecepcionLeche>()), Times.Once);
-            escenario.Proveedores.Verify(r => r.GetByIdAsync(It.IsAny<Guid>()), Times.Never); // the proveedor is never loaded
+            escenario.Queries.Verify(q => q.GetByIdAsync(It.IsAny<Guid>()), Times.Never); // no count is computed for a registration
+        }
+
+        [Fact]
+        public async Task RegistrarRecepcionAsync_ByAdmin_StampsTheUserTheServerTimeAndNoOperario()
+        {
+            // Arrange
+            var escenario = new Escenario();
+            RecepcionLeche? agregada = null;
+            escenario.Recepciones.Setup(r => r.AddAsync(It.IsAny<RecepcionLeche>()))
+                .Callback<RecepcionLeche>(r => agregada = r).Returns(Task.CompletedTask);
+
+            // Act
+            await escenario.Servicio().RegistrarRecepcionAsync(escenario.ProveedorId, Dto());
+
+            // Assert
+            Assert.NotNull(agregada);
+            Assert.Equal(escenario.UsuarioId, agregada.RegistradoPorUsuarioId);
+            Assert.Null(agregada.OperarioId);
+            Assert.Equal(new DateTime(2026, 10, 15, 15, 0, 0, DateTimeKind.Utc), agregada.RegistradoEn);
+            escenario.Operarios.Verify(o => o.GetActivoPorPinHashAsync(It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task RegistrarRecepcionAsync_ByRecepcionWithValidPin_StampsTheOperarioAndReturnsItsName()
+        {
+            // Arrange
+            var escenario = new Escenario(rol: RolUsuario.Recepcion);
+            var usuario = Usuario.Crear("recepcion", "Celular recepción", RolUsuario.Recepcion, "hash");
+            var operario = Operario.Crear("Juan Pérez", "hash-1234");
+            escenario.Usuarios.Setup(u => u.GetByIdAsync(escenario.UsuarioId)).ReturnsAsync(usuario);
+            escenario.Operarios.Setup(o => o.GetActivoPorPinHashAsync("hash-1234")).ReturnsAsync(operario);
+            RecepcionLeche? agregada = null;
+            escenario.Recepciones.Setup(r => r.AddAsync(It.IsAny<RecepcionLeche>()))
+                .Callback<RecepcionLeche>(r => agregada = r).Returns(Task.CompletedTask);
+            var dto = Dto();
+            dto.Pin = "1234";
+
+            // Act
+            var result = await escenario.Servicio().RegistrarRecepcionAsync(escenario.ProveedorId, dto);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal("Juan Pérez", result.OperarioNombre);
+            Assert.NotNull(agregada);
+            Assert.Equal(operario.Id, agregada.OperarioId);
+            Assert.Equal(escenario.UsuarioId, agregada.RegistradoPorUsuarioId);
+        }
+
+        [Fact]
+        public async Task RegistrarRecepcionAsync_ByRecepcionWithoutPin_ThrowsReglaDeNegocioExceptionOnPinAndNeverSaves()
+        {
+            // Arrange
+            var escenario = new Escenario(rol: RolUsuario.Recepcion);
+            escenario.Usuarios.Setup(u => u.GetByIdAsync(escenario.UsuarioId))
+                .ReturnsAsync(Usuario.Crear("recepcion", "Celular recepción", RolUsuario.Recepcion, "hash"));
+
+            // Act
+            var ex = await Assert.ThrowsAsync<ReglaDeNegocioException>(() => escenario.Servicio().RegistrarRecepcionAsync(escenario.ProveedorId, Dto()));
+
+            // Assert
+            Assert.Equal("pin", ex.Campo);
+            escenario.VerificarNadaGuardado();
+        }
+
+        [Fact]
+        public async Task GetOpcionesAsync_ReturnsIdAndNombreOnly()
+        {
+            // Arrange
+            var escenario = new Escenario();
+            var proveedor = Proveedor.Crear("Tambo Don Pedro", Guid.NewGuid());
+            escenario.Proveedores.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Proveedor> { proveedor });
+
+            // Act
+            var result = await escenario.Servicio().GetOpcionesAsync();
+
+            // Assert
+            var opcion = Assert.Single(result);
+            Assert.Equal(proveedor.Id, opcion.Id);
+            Assert.Equal("Tambo Don Pedro", opcion.Nombre);
+            escenario.Queries.Verify(q => q.GetAllAsync(), Times.Never);
         }
 
         [Fact]
