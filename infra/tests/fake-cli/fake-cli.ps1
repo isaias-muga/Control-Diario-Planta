@@ -69,6 +69,11 @@ elseif ($tool -eq 'az') {
         '^ad app list' { Reply $(if ($built) { '55555555-5555-5555-5555-555555555555' } else { '' }) }
         '^ad sp show' { Exists $built '66666666-6666-6666-6666-666666666666' }
         '^ad app federated-credential show' {
+            # The real az needs exactly these: the app (the id of the registration), the credential name, and a query that returns only the subject
+            if ($command -notmatch '--id 55555555-5555-5555-5555-555555555555 ' -or $command -notmatch '--federated-credential-id github-main ' -or $command -notmatch '--query subject ' -or $command -notmatch '--output tsv') {
+                [Console]::Error.WriteLine('fake-cli: federated-credential show called with the wrong arguments: ' + $command)
+                exit 2
+            }
             if ($state -eq 'credential') { Reply 'repo:isaias-muga@456/Control-Diario-Planta@123:ref:refs/heads/main' }
             if ($state -eq 'stalecredential') { Reply 'repo:isaias-muga/Control-Diario-Planta:ref:refs/heads/main' }
             NotFound
