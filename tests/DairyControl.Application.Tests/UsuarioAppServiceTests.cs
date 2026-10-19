@@ -26,8 +26,9 @@ namespace DairyControl.Application.Tests
                 Actual.Setup(a => a.Id).Returns(ActualId);
             }
 
-            public UsuarioAppService Servicio(string adminPassword = "contraseña-del-despliegue") =>
-                new(Usuarios.Object, Hasher.Object, Actual.Object, Options.Create(new AdminUserSettings { Username = "admin", Password = adminPassword }));
+            public UsuarioAppService Servicio(string adminPassword = "contraseña-del-despliegue", AdminUserSettings? ajustes = null) =>
+                new(Usuarios.Object, Hasher.Object, Actual.Object,
+                    Options.Create(ajustes ?? new AdminUserSettings { Username = "admin", Password = adminPassword }));
         }
 
         private static CrearUsuarioDto Dto(string rol = "Oficina") =>
@@ -197,7 +198,7 @@ namespace DairyControl.Application.Tests
         }
 
         [Fact]
-        public async Task AsegurarAdminInicialAsync_NoUsers_CreatesTheAdminWithoutForcingAPasswordChange()
+        public async Task AsegurarAdminInicialAsync_NoUsersAndDefaultSettings_CreatesTheAdminForcedToChangeThePassword()
         {
             // Arrange
             var escenario = new Escenario();
@@ -209,7 +210,34 @@ namespace DairyControl.Application.Tests
             // Assert
             Assert.True(creado);
             escenario.Usuarios.Verify(u => u.AddAsync(It.Is<Usuario>(x =>
-                x.Username == "admin" && x.Rol == RolUsuario.Admin && !x.DebeCambiarPassword && x.PasswordHash == "hash-de-contraseña-del-despliegue")), Times.Once);
+                x.Username == "admin" && x.Rol == RolUsuario.Admin && x.DebeCambiarPassword && x.PasswordHash == "hash-de-contraseña-del-despliegue")), Times.Once);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task AsegurarAdminInicialAsync_NoUsers_ForcesTheChangeOnlyWhenTheSettingSaysSo(bool forzar)
+        {
+            // Arrange
+            var escenario = new Escenario();
+            escenario.Usuarios.Setup(u => u.AnyAsync()).ReturnsAsync(false);
+            var ajustes = new AdminUserSettings { Username = "admin", Password = "contraseña-del-despliegue", ForzarCambioPassword = forzar };
+
+            // Act
+            await escenario.Servicio(ajustes: ajustes).AsegurarAdminInicialAsync();
+
+            // Assert
+            escenario.Usuarios.Verify(u => u.AddAsync(It.Is<Usuario>(x => x.DebeCambiarPassword == forzar)), Times.Once);
+        }
+
+        [Fact]
+        public void AdminUserSettings_Default_ForcesThePasswordChange()
+        {
+            // Arrange & Act
+            var ajustes = new AdminUserSettings();
+
+            // Assert
+            Assert.True(ajustes.ForzarCambioPassword);
         }
 
         [Fact]

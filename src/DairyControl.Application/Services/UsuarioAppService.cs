@@ -82,7 +82,7 @@ namespace DairyControl.Application.Services
 
         /// <summary>
         /// When there are no users yet, creates the first Admin from the deployment secret (AdminUser:Password). Returns true if it created it.
-        /// That password is chosen by whoever deploys, so the admin is not forced to change it.
+        /// Unless AdminUser:ForzarCambioPassword is false, the admin must choose a password of their own at the first login.
         /// </summary>
         public async Task<bool> AsegurarAdminInicialAsync()
         {
@@ -97,7 +97,7 @@ namespace DairyControl.Application.Services
             }
             Usuario.ValidarPassword(ajustes.Password, "AdminUser:Password");
 
-            var admin = Usuario.Crear(ajustes.Username, "Administrador", RolUsuario.Admin, _hasher.Hash(ajustes.Password), debeCambiarPassword: false);
+            var admin = Usuario.Crear(ajustes.Username, "Administrador", RolUsuario.Admin, _hasher.Hash(ajustes.Password), debeCambiarPassword: ajustes.ForzarCambioPassword);
             await _usuarios.AddAsync(admin);
             return true;
         }
