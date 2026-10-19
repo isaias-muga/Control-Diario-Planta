@@ -9,6 +9,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { ListadoRecepciones, RecepcionListado, TotalesListado } from '../../models/recepcion-listado';
 import { hoyEnPlanta, rangoDeAtajo } from '../../utils/periodos';
+import { RecepcionesList } from '../recepciones-list/recepciones-list';
 import { RecepcionesFiltros } from '../recepciones-filtros/recepciones-filtros';
 import { RecepcionesPanel } from './recepciones-panel';
 
@@ -38,6 +39,11 @@ const recepcion = (cambios: Partial<RecepcionListado>): RecepcionListado => ({
   silo: 1,
   observaciones: null,
   registradoPor: null,
+  anulada: false,
+  motivoAnulacion: null,
+  anuladaPor: null,
+  anuladaEn: null,
+  cantidadCorrecciones: 0,
   motivos: [],
   ...cambios,
 });
@@ -124,6 +130,17 @@ describe('RecepcionesPanel', () => {
       expect(req.request.params.has('ticket')).toBe(false);
       expect(req.request.params.has('soloFueraDeRango')).toBe(false);
       expect(req.request.params.has('pagina')).toBe(false);
+      req.flush(listado());
+    });
+
+    it('sends incluirAnuladas when the URL says anuladas=1, and not otherwise', async () => {
+      await abrir('/?desde=2026-10-01&hasta=2026-10-15&anuladas=1');
+      http.expectOne((r) => r.url.endsWith('/Configuracion/calidad')).flush(LIMITES);
+      http.expectOne((r) => r.url.endsWith('/Proveedores')).flush([]);
+
+      const req = pedidoListado();
+
+      expect(req.request.params.get('incluirAnuladas')).toBe('true');
       req.flush(listado());
     });
 
@@ -225,6 +242,31 @@ describe('RecepcionesPanel', () => {
       const req = pedidoListado();
       expect(req.request.params.get('soloFueraDeRango')).toBe('true');
       req.flush(listado());
+    });
+
+    it('writes "Incluir anuladas" to the URL and asks for the voided ones', async () => {
+      await abrir('/');
+      await cargar();
+
+      filtros().cambio.emit({ desde: '2026-10-14', hasta: '2026-10-14', proveedorId: null, ticket: null, soloFueraDeRango: false, incluirAnuladas: true });
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+
+      expect(TestBed.inject(Router).url).toContain('anuladas=1');
+      const req = pedidoListado();
+      expect(req.request.params.get('incluirAnuladas')).toBe('true');
+      req.flush(listado());
+    });
+
+    it('reloads the list, without the spinner, when a recepción was voided from a row', async () => {
+      await abrir('/');
+      await cargar();
+
+      (harness.fixture.debugElement.query(By.directive(RecepcionesList)).componentInstance as RecepcionesList).cambio.emit();
+
+      const req = pedidoListado();
+      expect(req.request.params.get('pagina') ?? '1').toBe('1');
+      req.flush(listado({ items: [] }));
     });
 
     it('keeps the URL free of filters that are off', async () => {

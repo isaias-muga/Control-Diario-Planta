@@ -37,7 +37,7 @@
       <mat-select [formControl]="proveedorControl" (selectionChange)="proveedorCambiado()">
         <mat-option [value]="TODOS">Todos</mat-option>
         @for (p of lista; track p.id) {
-          <mat-option [value]="p.id">{{ p.nombre }}</mat-option>
+          <mat-option [value]="p.id">{{ p.nombre }}@if (!p.activo) { (inactivo)}</mat-option>
         }
       </mat-select>
     </mat-form-field>
@@ -52,6 +52,7 @@
   </mat-form-field>
 
   <mat-checkbox [formControl]="soloControl" (change)="soloCambiado()">Solo fuera de rango</mat-checkbox>
+  <mat-checkbox [formControl]="anuladasControl" (change)="anuladasCambiado()">Incluir anuladas</mat-checkbox>
 </div>
 
 @if (errorRango(); as mensaje) {

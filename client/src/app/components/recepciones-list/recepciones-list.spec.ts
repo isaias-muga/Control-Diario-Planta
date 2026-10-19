@@ -26,6 +26,11 @@ const recepcion = (cambios: Partial<RecepcionListado>): RecepcionListado => ({
   silo: 1,
   observaciones: null,
   registradoPor: null,
+  anulada: false,
+  motivoAnulacion: null,
+  anuladaPor: null,
+  anuladaEn: null,
+  cantidadCorrecciones: 0,
   motivos: [],
   ...cambios,
 });
@@ -300,8 +305,8 @@ describe('RecepcionesList', () => {
         agua: ancho('agua'), litrosReales: ancho('litrosReales'), grasa: ancho('grasa'), acidez: ancho('acidez'),
         temperatura: ancho('temperatura'), silo: ancho('silo'), estado: ancho('estado'),
       }).toEqual({
-        hora: '6%', ticket: '8%', proveedor: '15%', litros: '8%', agua: '6.5%', litrosReales: '8%',
-        grasa: '6.5%', acidez: '7.5%', temperatura: '7.5%', silo: '4.5%', estado: '11%',
+        hora: '5.5%', ticket: '7%', proveedor: '13%', litros: '7.5%', agua: '6%', litrosReales: '7.5%',
+        grasa: '6%', acidez: '7%', temperatura: '7%', silo: '4.5%', estado: '12%',
       });
       // Observaciones has no explicit width: it takes the rest
       expect(ancho('observaciones')).toBe('auto');

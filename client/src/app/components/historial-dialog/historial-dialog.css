@@ -1,0 +1,54 @@
+.contexto {
+  margin: 0 0 16px;
+  color: var(--mat-sys-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
+.historial {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.correccion {
+  padding: 12px 0;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.correccion:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.encabezado,
+.motivo {
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+}
+
+.motivo {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.cambios {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.cambios li {
+  overflow-wrap: anywhere;
+}
+
+.campo {
+  font-weight: 500;
+}
+
+.anterior {
+  color: var(--mat-sys-on-surface-variant);
+  text-decoration: line-through;
+}
+
+.nuevo {
+  font-weight: 500;
+}

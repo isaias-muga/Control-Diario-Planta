@@ -17,6 +17,13 @@ export interface RecepcionListado {
   /** Who loaded it (the operario when a PIN identified one, otherwise the user); null for old rows. */
   registradoPor: string | null;
   motivos: MotivoFueraDeRango[];
+  /** A voided recepción stays in the list only when asked for; it never counts in any total. */
+  anulada: boolean;
+  motivoAnulacion: string | null;
+  anuladaPor: string | null;
+  anuladaEn: string | null;
+  /** How many corrections it has had (each correction counts once). */
+  cantidadCorrecciones: number;
 }
 
 export interface TotalesListado {
@@ -53,6 +60,7 @@ export interface FiltroRecepciones {
   proveedorId?: string | null;
   ticket?: number | null;
   soloFueraDeRango?: boolean;
+  incluirAnuladas?: boolean;
   pagina?: number;
 }
 

@@ -33,7 +33,7 @@ describe('RecepcionesFiltros', () => {
     componente.cambio.subscribe((f) => emitidos.push(f));
   });
 
-  async function mostrar(filtros: FiltroRecepciones, proveedores: { id: string; nombre: string; cantidadRecepciones: number }[] | null = null): Promise<void> {
+  async function mostrar(filtros: FiltroRecepciones, proveedores: { id: string; nombre: string; cantidadRecepciones: number; activo?: boolean }[] | null = null): Promise<void> {
     fixture.componentRef.setInput('filtros', filtros);
     fixture.componentRef.setInput('proveedores', proveedores);
     await fixture.whenStable();
@@ -354,6 +354,39 @@ describe('RecepcionesFiltros', () => {
       interno().soloCambiado();
 
       expect(emitidos[0].soloFueraDeRango).toBe(false);
+    });
+  });
+
+  describe('Incluir anuladas', () => {
+    it('is off by default and emits the filter when toggled', async () => {
+      await mostrar(base());
+      expect(interno().anuladasControl.value).toBe(false);
+
+      interno().anuladasControl.setValue(true);
+      interno().anuladasCambiado();
+
+      expect(emitidos[0].incluirAnuladas).toBe(true);
+      expect(emitidos[0].soloFueraDeRango).toBe(false); // the other filters are kept
+    });
+
+    it('follows the filter that comes from the URL', async () => {
+      await mostrar(base({ incluirAnuladas: true }));
+
+      expect(interno().anuladasControl.value).toBe(true);
+      expect((el().textContent ?? '')).toContain('Incluir anuladas');
+    });
+
+    it('marks an inactive proveedor in the selector, so its history can still be filtered', async () => {
+      await mostrar(base(), [
+        { id: 'p1', nombre: 'Tambo Activo', cantidadRecepciones: 1, activo: true },
+        { id: 'p2', nombre: 'Tambo Cerrado', cantidadRecepciones: 4, activo: false },
+      ]);
+      (el().querySelector('mat-select') as HTMLElement).click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const opciones = Array.from(document.querySelectorAll('mat-option')).map((o) => (o.textContent ?? '').trim());
+      expect(opciones).toEqual(['Todos', 'Tambo Activo', 'Tambo Cerrado (inactivo)']);
     });
   });
 

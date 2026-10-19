@@ -1,0 +1,40 @@
+<h2 mat-dialog-title>{{ data.titulo }}</h2>
+
+<mat-dialog-content>
+  @if (data.contexto) {
+    <p class="contexto">{{ data.contexto }}</p>
+  }
+
+  @if (cargando()) {
+    <p aria-busy="true">Cargando historial…</p>
+  } @else if (error(); as mensaje) {
+    <p class="form-error" role="alert">{{ mensaje }}</p>
+  } @else if (items().length === 0) {
+    <p class="vacio">Todavía no hay cambios registrados.</p>
+  } @else {
+    <ol class="historial">
+      @for (c of items(); track c.correccionId) {
+        <li class="correccion">
+          <p class="encabezado">
+            <strong>{{ instante(c.enUtc) }}</strong> · {{ c.usuario ?? '—' }}
+          </p>
+          <p class="motivo">Motivo: {{ c.motivo }}</p>
+          <ul class="cambios">
+            @for (cambio of c.cambios; track cambio.campo) {
+              <li>
+                <span class="campo">{{ etiqueta(cambio.campo) }}:</span>&ngsp;
+                <span class="anterior">{{ valor(cambio.campo, cambio.valorAnterior) }}</span>&ngsp;
+                <span aria-label="pasó a">→</span>&ngsp;
+                <span class="nuevo">{{ valor(cambio.campo, cambio.valorNuevo) }}</span>
+              </li>
+            }
+          </ul>
+        </li>
+      }
+    </ol>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" mat-dialog-close>Cerrar</button>
+</mat-dialog-actions>

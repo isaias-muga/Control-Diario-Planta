@@ -3,6 +3,8 @@ import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import {
@@ -10,7 +12,12 @@ import {
   RecepcionListado,
   SubtotalDia,
 } from '../../models/recepcion-listado';
+import { AuthService } from '../../services/auth';
+import { RecepcionesService } from '../../services/recepciones';
+import { textoFechaHora, textoInstante } from '../../utils/historial';
 import { formatearFecha } from '../../utils/periodos';
+import { HistorialDialog, HistorialDialogData } from '../historial-dialog/historial-dialog';
+import { MotivoDialog, MotivoDialogData } from '../motivo-dialog/motivo-dialog';
 import { ObservacionCelda } from '../observacion-celda/observacion-celda';
 import {
   ObservacionesDialog,
@@ -43,6 +50,7 @@ const ETIQUETA_MOTIVO: Record<MotivoFueraDeRango, string> = {
     DecimalPipe,
     RouterLink,
     MatButtonModule,
+    MatMenuModule,
     MatTableModule,
     MatTooltipModule,
     ObservacionCelda,
@@ -52,6 +60,9 @@ const ETIQUETA_MOTIVO: Record<MotivoFueraDeRango, string> = {
 })
 export class RecepcionesList {
   private dialog = inject(MatDialog);
+  private snackBar = inject(MatSnackBar);
+  private auth = inject(AuthService);
+  private recepcionesService = inject(RecepcionesService);
 
   items = input.required<RecepcionListado[]>();
   /** Subtotals of the whole day, for the days that appear in `items`. */
@@ -61,13 +72,17 @@ export class RecepcionesList {
   hayMas = input(false);
   cargandoMas = input(false);
   cargarMas = output<void>();
+  /** A recepción was voided from the row menu: the page reloads the list and its totals. */
+  cambio = output<void>();
 
   protected columnas = computed(() => {
     const base = [
       'hora', 'ticket', 'proveedor', 'litros', 'agua', 'litrosReales',
       'grasa', 'acidez', 'temperatura', 'silo', 'estado', 'observaciones',
     ];
-    return this.mostrarProveedor() ? base : base.filter((c) => c !== 'proveedor');
+    const visibles = this.mostrarProveedor() ? base : base.filter((c) => c !== 'proveedor');
+    // Correcting and voiding are for the Admin only (the API refuses everybody else anyway): nobody else gets the menu column
+    return this.auth.esAdmin() ? [...visibles, 'acciones'] : visibles;
   });
 
   protected filas = computed<Fila[]>(() => {
@@ -111,6 +126,51 @@ export class RecepcionesList {
 
   protected detalleEstado(r: RecepcionListado): string {
     return r.motivos.map((m) => ETIQUETA_MOTIVO[m]).join(', ');
+  }
+
+  protected detalleAnulada(r: RecepcionListado): string {
+    const cuando = r.anuladaEn ? ` el ${textoInstante(r.anuladaEn)}` : '';
+    return `Anulada por ${r.anuladaPor ?? '—'}${cuando}. Motivo: ${r.motivoAnulacion ?? '—'}`;
+  }
+
+  protected textoCorregida(r: RecepcionListado): string {
+    return `Corregida ${r.cantidadCorrecciones} ${r.cantidadCorrecciones === 1 ? 'vez' : 'veces'}. Ver historial`;
+  }
+
+  /** The history is read by every role that reads the list. */
+  protected verHistorial(r: RecepcionListado): void {
+    this.dialog.open<HistorialDialog, HistorialDialogData>(HistorialDialog, {
+      data: {
+        titulo: 'Historial de la recepción',
+        contexto: `Ticket ${r.ticket ?? '—'} · ${r.proveedorNombre} · ${textoFechaHora(r.fechaHora)}`,
+        cargar: () => this.recepcionesService.getHistorial(r.id),
+      },
+      width: '520px',
+      maxWidth: '95vw',
+    });
+  }
+
+  protected anular(r: RecepcionListado): void {
+    this.dialog
+      .open<MotivoDialog, MotivoDialogData, boolean>(MotivoDialog, {
+        data: {
+          titulo: 'Anular recepción',
+          mensaje: `La recepción del ticket ${r.ticket ?? '—'} (${r.proveedorNombre}) queda anulada para siempre: no suma en ningún total y su ticket no se puede volver a usar. Sigue visible con "Incluir anuladas".`,
+          confirmar: 'Anular',
+          peligro: true,
+          guardar: (motivo) => this.recepcionesService.anular(r.id, motivo),
+        },
+        role: 'alertdialog',
+        width: '480px',
+        maxWidth: '95vw',
+      })
+      .afterClosed()
+      .subscribe((anulada) => {
+        if (anulada) {
+          this.snackBar.open('Recepción anulada.', 'Cerrar', { duration: 4000 });
+          this.cambio.emit();
+        }
+      });
   }
 
   protected verObservaciones(r: RecepcionListado): void {

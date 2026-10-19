@@ -56,17 +56,18 @@ td.mat-mdc-cell {
   text-overflow: ellipsis;
 }
 
-.mat-column-hora { width: 6%; }
-.mat-column-ticket { width: 8%; }
-.mat-column-proveedor { width: 15%; }
-.mat-column-litros { width: 8%; }
-.mat-column-agua { width: 6.5%; }
-.mat-column-litrosReales { width: 8%; }
-.mat-column-grasa { width: 6.5%; }
-.mat-column-acidez { width: 7.5%; }
-.mat-column-temperatura { width: 7.5%; }
+.mat-column-hora { width: 5.5%; }
+.mat-column-ticket { width: 7%; }
+.mat-column-proveedor { width: 13%; }
+.mat-column-litros { width: 7.5%; }
+.mat-column-agua { width: 6%; }
+.mat-column-litrosReales { width: 7.5%; }
+.mat-column-grasa { width: 6%; }
+.mat-column-acidez { width: 7%; }
+.mat-column-temperatura { width: 7%; }
 .mat-column-silo { width: 4.5%; }
-.mat-column-estado { width: 11%; }
+.mat-column-estado { width: 12%; }
+.mat-column-acciones { width: 5%; } /* only the Admin has it */
 /* .mat-column-observaciones: no width, it takes the rest */
 
 /* Same padding on both outer edges, header included */
@@ -92,6 +93,26 @@ td.identificador {
   text-align: center;
   padding-left: 4px; /* narrow columns: more room for the content */
   padding-right: 4px;
+}
+
+/* The row menu: one icon button, centered, as high as the row allows */
+th.acciones,
+td.acciones {
+  text-align: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+td.acciones .menu-fila {
+  --mdc-icon-button-state-layer-size: 40px;
+  --mat-icon-button-state-layer-size: 40px;
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+}
+
+.item-peligro {
+  color: var(--mat-sys-error);
 }
 
 /* Day group header: one cell across the whole row */
@@ -131,6 +152,62 @@ tr.fila-dia td.mat-mdc-cell {
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: middle;
+}
+
+/* The state cell: the badge and, when it was corrected, the small "corrected" mark that opens the history */
+.estado-contenido {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.estado-contenido .estado {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+button.estado,
+button.marca-corregida {
+  font: inherit;
+  cursor: pointer;
+}
+
+button.estado {
+  background: transparent;
+  color: inherit;
+}
+
+.estado-anulada {
+  border-color: var(--mat-sys-outline);
+  background: var(--mat-sys-surface-container-highest);
+  color: var(--mat-sys-on-surface-variant);
+  font-weight: 500;
+}
+
+button.marca-corregida {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mat-sys-primary);
+}
+
+button.marca-corregida:hover,
+button.marca-corregida:focus-visible {
+  background: var(--mat-sys-surface-container-highest);
+}
+
+/* A voided recepción stays in the list, struck through and quiet (the state and the menu keep their look) */
+tr.fila-anulada td.mat-mdc-cell:not(.estado-celda):not(.acciones) {
+  color: var(--mat-sys-on-surface-variant);
+  text-decoration: line-through;
 }
 
 .estado-alerta {

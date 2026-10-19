@@ -7,6 +7,11 @@ mat-card {
   overflow: hidden;
 }
 
+/* An inactive proveedor is not offered for new recepciones; it stays here with all its history */
+.inactivo {
+  font-weight: 500;
+}
+
 @media (max-width: 599px) {
   .page-header button {
     width: 100%;
