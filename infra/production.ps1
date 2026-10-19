@@ -124,6 +124,15 @@ function Get-AzValue([object[]]$CliArgs) {
     return $r.Output
 }
 
+# The subject of the federated credential called $Name on the app registration, or '' when there is none. It asks az for that one
+# credential only (show by name, tsv), so no JSON list is parsed: in Windows PowerShell 5.1 ConvertFrom-Json '[]' is not enumerated and
+# reading a property of it fails under strict mode (this is what stopped the first run).
+function Get-FederatedCredentialSubject([string]$AppId, [string]$Name) {
+    $text = Get-AzValue @('ad', 'app', 'federated-credential', 'show', '--id', $AppId, '--federated-credential-id', $Name, '--query', 'subject', '--output', 'tsv')
+    if (-not $text) { return '' }
+    return (@($text -split "`r?`n") | Select-Object -First 1).Trim()
+}
+
 function Test-AzExists([object[]]$CliArgs) {
     return ((Invoke-Az -CliArgs ($CliArgs + @('--output', 'none')) -ReadOnly -AllowFail).ExitCode -eq 0)
 }
@@ -458,14 +467,13 @@ $credentialBody = @{
     description = "Deploy production from main of $ownerName/$repoName (immutable-ID subject)"
     audiences   = @('api://AzureADTokenExchange')
 }
-$credentialList = Get-AzValue @('ad', 'app', 'federated-credential', 'list', '--id', $deployAppId, '--output', 'json')
-$existingCredential = $null
-if ($credentialList) { $existingCredential = @($credentialList | ConvertFrom-Json) | Where-Object { $_.name -eq $FederatedCredentialName } | Select-Object -First 1 }
-if ($existingCredential -and $existingCredential.subject -eq $federatedSubject) { Write-Info 'Federated credential already exists with the right subject.' }
+$existingSubject = Get-FederatedCredentialSubject $deployAppId $FederatedCredentialName
+$credentialExists = ($existingSubject -ne '')
+if ($credentialExists -and $existingSubject -eq $federatedSubject) { Write-Info 'Federated credential already exists with the right subject.' }
 else {
     $credentialFile = Write-TempJson $credentialBody
     try {
-        if ($existingCredential) {
+        if ($credentialExists) {
             Invoke-WithRetry { Invoke-Az -CliArgs @('ad', 'app', 'federated-credential', 'update', '--id', $deployAppId, '--federated-credential-id', $FederatedCredentialName, '--parameters', "@$credentialFile") | Out-Null }
         }
         else {
