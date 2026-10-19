@@ -249,6 +249,40 @@ export async function crearOperarioPorApi(request: APIRequestContext): Promise<{
   throw new Error('No free PIN found for the test operario.');
 }
 
+/** Plant time now minus a few minutes, as YYYY-MM-DDTHH:mm:ss (what the API takes), computed here independently of the app. */
+export function ahoraEnPlantaMenos(minutos = 5): string {
+  const partes = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).format(new Date(Date.now() - minutos * 60_000));
+  return partes.replace(' ', 'T');
+}
+
+/** Creates a proveedor through the admin API and returns its id and name. */
+export async function crearProveedorConIdPorApi(request: APIRequestContext): Promise<{ id: string; nombre: string }> {
+  const headers = await cabecerasAutenticadas(request);
+  const nombre = nombreUnico();
+  const respuesta = await request.post('/api/Proveedores', { headers, data: { nombre } });
+  expect(respuesta.status()).toBe(201);
+  return { id: (await respuesta.json()).id as string, nombre };
+}
+
+/** Registers a recepción through the admin API (a few minutes ago, silo 1, a unique ticket unless given) and returns its id and ticket. */
+export async function registrarRecepcionPorApi(
+  request: APIRequestContext,
+  proveedorId: string,
+  valores: { litros: number; acidez?: number; temperatura?: number; ticket?: number } ,
+): Promise<{ id: string; ticket: number }> {
+  const headers = await cabecerasAutenticadas(request);
+  const ticket = valores.ticket ?? ticketUnico();
+  const respuesta = await request.post(`/api/Proveedores/${proveedorId}/recepciones`, {
+    headers,
+    data: { litros: valores.litros, acidez: valores.acidez ?? 17, temperatura: valores.temperatura ?? 5, silo: 1, ticket, fechaHora: ahoraEnPlantaMenos() },
+  });
+  expect(respuesta.status()).toBe(200);
+  return { id: (await respuesta.json()).id as string, ticket };
+}
+
 /** Creates a proveedor through the admin API and returns its name. */
 export async function crearProveedorPorApi(request: APIRequestContext): Promise<string> {
   const headers = await cabecerasAutenticadas(request);
