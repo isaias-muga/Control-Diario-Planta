@@ -37,7 +37,7 @@ export class AuthService {
   readonly puedeRegistrar = computed(() => this.rol() === 'Admin' || this.rol() === 'Oficina');
   readonly debeCambiarPassword = computed(() => this.isLoggedIn() && (this.debeCambiar() || this.sesion()?.debeCambiarPassword === true));
 
-  /** Where each person starts: the reception phone has one button, the office has the dashboard. */
+  /** Where each person starts: the reception phone has one button, the office the list of today's recepciones, the owner the dashboard. */
   readonly inicio = computed(() => {
     // A token without a role this client knows would loop between guards: it starts at the login page
     if (!this.isLoggedIn() || this.rol() === null) {
@@ -46,7 +46,15 @@ export class AuthService {
     if (this.debeCambiarPassword()) {
       return '/cambiar-password';
     }
-    return this.rol() === 'Recepcion' ? '/inicio' : '/resumen';
+    switch (this.rol()) {
+      case 'Recepcion':
+        return '/inicio';
+      case 'Consulta':
+        return '/resumen';
+      default:
+        // Recepciones opens on the "Hoy" filter when the address carries no dates
+        return '/recepciones';
+    }
   });
 
   constructor() {

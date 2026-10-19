@@ -37,6 +37,13 @@ describe('ProveedoresList', () => {
     expect(botones(await abrir('Admin'))).toContain('Nuevo proveedor');
   });
 
+  it('offers no way to create a proveedor to Consulta (read only)', async () => {
+    const el = await abrir('Consulta');
+
+    expect(botones(el)).not.toContain('Nuevo proveedor');
+    expect(el.textContent).toContain('Tambo Don Pedro');
+  });
+
   it('offers no way to create a proveedor to the office (read only)', async () => {
     const el = await abrir('Oficina');
 

@@ -168,6 +168,27 @@ describe('ProveedorDetail', () => {
     http.match((r) => r.url.endsWith('/Configuracion/calidad')).forEach((r) => r.flush(LIMITES));
   });
 
+  it('offers the registration link to the office but not to Consulta', async () => {
+    TestBed.resetTestingModule();
+    cerrarSesionDePrueba();
+    iniciarSesionDePrueba('Consulta');
+    TestBed.configureTestingModule({
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: LOCALE_ID, useValue: 'es-AR' }],
+    });
+    http = TestBed.inject(HttpTestingController);
+    fixture = TestBed.createComponent(ProveedorDetail);
+    component = fixture.componentInstance;
+    fixture.componentRef.setInput('id', 'test-id');
+    await fixture.whenStable();
+    http.expectOne((r) => r.url.endsWith(`/Proveedores/${component.id()}`)).flush(proveedores[1]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    http.match(() => true);
+
+    expect(el().querySelector('h2')?.textContent).toBe('Tambo Test');
+    expect(el().querySelector('.page-header a')).toBeNull();
+  });
+
   it('offers the registration link to the office too (the clerk records the lab measurement)', async () => {
     TestBed.resetTestingModule();
     cerrarSesionDePrueba();

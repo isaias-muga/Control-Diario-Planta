@@ -50,8 +50,9 @@ describe('Login', () => {
 
   it.each<[Rol, string]>([
     ['Recepcion', '/inicio'],
-    ['Oficina', '/resumen'],
-    ['Admin', '/resumen'],
+    ['Oficina', '/recepciones'],
+    ['Admin', '/recepciones'],
+    ['Consulta', '/resumen'],
   ])('a %s that logs in goes to %s', async (rol, destino) => {
     const navegar = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     component.form.setValue({ username: 'ana', password: 'una-clave' });

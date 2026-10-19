@@ -77,10 +77,10 @@ describe('UsuarioDialog', () => {
     expect(component.errorCampo()).toEqual({ campo: 'password', mensaje: 'La contraseña debe tener al menos 8 caracteres.' });
   });
 
-  it('offers the three roles with plain names', () => {
+  it('offers the four roles with plain names', () => {
     const texto = fixture.nativeElement.textContent as string;
 
     expect(texto).toContain('Nuevo usuario');
-    expect(component['roles']).toEqual(['Admin', 'Oficina', 'Recepcion']);
+    expect(component['roles']).toEqual(['Admin', 'Oficina', 'Consulta', 'Recepcion']);
   });
 });

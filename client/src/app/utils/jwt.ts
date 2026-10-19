@@ -1,6 +1,6 @@
-export type Rol = 'Admin' | 'Oficina' | 'Recepcion';
+export type Rol = 'Admin' | 'Oficina' | 'Recepcion' | 'Consulta';
 
-const ROLES: readonly string[] = ['Admin', 'Oficina', 'Recepcion'];
+const ROLES: readonly string[] = ['Admin', 'Oficina', 'Recepcion', 'Consulta'];
 
 /** What the client reads from its own token to decide what to show. The server decides what is allowed; this never grants anything. */
 export interface SesionToken {

@@ -20,7 +20,8 @@ import { Rol } from '../../utils/jwt';
 
 export const ETIQUETAS_ROL: Record<Rol, string> = {
   Admin: 'Administrador',
-  Oficina: 'Oficina (solo lectura)',
+  Oficina: 'Oficina',
+  Consulta: 'Consulta (solo lectura)',
   Recepcion: 'Celular de recepción',
 };
 

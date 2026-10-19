@@ -3,9 +3,9 @@ import { Routes } from '@angular/router';
 import { cambioPasswordGuard, roleGuard } from './guards/role-guard';
 import { AuthService } from './services/auth';
 
-// Who may open what (the API enforces the same on its side). The office reads everything; Admin also changes data and manages
-// users; the reception phone only has its home and the quick flow.
-const oficina = roleGuard('Admin', 'Oficina');
+// Who may open what (the API enforces the same on its side). The office and Consulta read everything; Admin also changes data and
+// manages users; the reception phone only has its home and the quick flow. Consulta never registers.
+const oficina = roleGuard('Admin', 'Oficina', 'Consulta');
 const soloAdmin = roleGuard('Admin');
 const carga = roleGuard('Admin', 'Oficina', 'Recepcion');
 const recepcion = roleGuard('Recepcion');
