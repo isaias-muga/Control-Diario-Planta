@@ -22,6 +22,55 @@ namespace DairyControl.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("DairyControl.Domain.Entities.CambioRegistrado", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Campo")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("CorreccionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("EnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Entidad")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid>("EntidadId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Motivo")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ValorAnterior")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ValorNuevo")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.HasIndex("Entidad", "EntidadId", "EnUtc");
+
+                    b.ToTable("HistorialCambios", (string)null);
+                });
+
             modelBuilder.Entity("DairyControl.Domain.Entities.ConfiguracionCalidad", b =>
                 {
                     b.Property<Guid>("Id")
@@ -86,6 +135,9 @@ namespace DairyControl.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<bool>("Activo")
+                        .HasColumnType("bit");
+
                     b.Property<Guid?>("CreadoPorUsuarioId")
                         .HasColumnType("uniqueidentifier");
 
@@ -93,6 +145,11 @@ namespace DairyControl.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.HasKey("Id");
 
@@ -106,8 +163,18 @@ namespace DairyControl.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTime?>("AnuladaEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("AnuladaPorUsuarioId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime>("FechaHora")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("MotivoAnulacion")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("Observaciones")
                         .HasMaxLength(500)
@@ -125,6 +192,11 @@ namespace DairyControl.Infrastructure.Migrations
                     b.Property<Guid?>("RegistradoPorUsuarioId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int?>("Silo")
                         .HasColumnType("int");
 
@@ -132,6 +204,8 @@ namespace DairyControl.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AnuladaPorUsuarioId");
 
                     b.HasIndex("FechaHora");
 
@@ -210,6 +284,15 @@ namespace DairyControl.Infrastructure.Migrations
                     b.ToTable("Usuarios", (string)null);
                 });
 
+            modelBuilder.Entity("DairyControl.Domain.Entities.CambioRegistrado", b =>
+                {
+                    b.HasOne("DairyControl.Domain.Entities.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DairyControl.Domain.Entities.ConfiguracionCalidad", b =>
                 {
                     b.OwnsOne("DairyControl.Domain.ValueObjects.LimitesCalidad", "Limites", b1 =>
@@ -260,6 +343,11 @@ namespace DairyControl.Infrastructure.Migrations
 
             modelBuilder.Entity("DairyControl.Domain.Entities.RecepcionLeche", b =>
                 {
+                    b.HasOne("DairyControl.Domain.Entities.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("AnuladaPorUsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("DairyControl.Domain.Entities.Operario", null)
                         .WithMany()
                         .HasForeignKey("OperarioId")

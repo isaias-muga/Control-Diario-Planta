@@ -60,6 +60,9 @@ namespace DairyControl.Infrastructure.Persistence
                 _context.ChangeTracker.Clear(); // a retried attempt starts from a clean state
                 await using var transaccion = await _context.Database.BeginTransactionAsync();
 
+                // The demo reset is the one place that deletes recepciones and proveedores (real data is only ever corrected, voided or
+                // deactivated); the history that describes them goes with them. An architecture test allows only this file.
+                await _context.HistorialCambios.ExecuteDeleteAsync();
                 recepcionesBorradas = await _context.Recepciones.ExecuteDeleteAsync();
                 proveedoresBorrados = await _context.Proveedores.ExecuteDeleteAsync();
 
