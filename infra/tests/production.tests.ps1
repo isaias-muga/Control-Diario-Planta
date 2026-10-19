@@ -75,12 +75,13 @@ Assert-That ($jsonLines.Count -ge 1) "the script uses ConvertFrom-Json ($($jsonL
 $piped = @($jsonLines | Where-Object { $_ -match 'ConvertFrom-Json[^|]*\|' })
 Assert-That ($piped.Count -eq 0) 'nothing is piped on from ConvertFrom-Json (Where-Object, ForEach-Object, Select-Object)'
 Assert-That ((Get-Content -Raw $scriptPath) -notmatch "federated-credential',\s*'list'") 'the script does not call federated-credential list'
+Assert-That ((Get-Content -Raw $scriptPath) -notmatch "@\('lock'|'lock',\s*'(show|create|list)'") 'the script never calls az lock (locks go by full resource id through az rest)'
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 Write-Host '== -DryRun against the fake az and gh'
 $mutating = '^(az (extension add|provider register|group create|acr create|monitor log-analytics workspace (create|update)|identity create|role assignment (create|delete)|containerapp (env )?create|sql (server|db)( str-policy| firewall-rule)? (create|update|set)|ad (app|sp) create|ad app federated-credential (create|update)|lock create|rest --method put)|gh (secret|variable) set)'
 
-function Invoke-Script([string]$State, [string]$Offer = '', [switch]$Real) {
+function Invoke-Script([string]$State, [string]$Offer = '', [switch]$Real, [string]$Locks = '') {
     $log = Join-Path ([System.IO.Path]::GetTempPath()) ("cdf-fake-" + [guid]::NewGuid().ToString('N') + '.log')
     $oldPath = $env:PATH
     $oldPreference = $ErrorActionPreference
@@ -90,6 +91,7 @@ function Invoke-Script([string]$State, [string]$Offer = '', [switch]$Real) {
         $env:CDF_FAKE_STATE = $State
         $env:CDF_FAKE_LOG = $log
         $env:CDF_FAKE_OFFER = $Offer
+        $env:CDF_FAKE_LOCKS = $Locks
         if ($Real) {
             # Not a dry run: the commands that change things succeed in the fake and are logged; "SI" answers the confirmation
             $env:CDF_FAKE_ALLOW_MUTATION = '1'
@@ -103,7 +105,7 @@ function Invoke-Script([string]$State, [string]$Offer = '', [switch]$Real) {
     finally {
         $ErrorActionPreference = $oldPreference
         $env:PATH = $oldPath
-        Remove-Item Env:CDF_FAKE_STATE, Env:CDF_FAKE_LOG, Env:CDF_FAKE_OFFER, Env:CDF_FAKE_ALLOW_MUTATION -ErrorAction SilentlyContinue
+        Remove-Item Env:CDF_FAKE_STATE, Env:CDF_FAKE_LOG, Env:CDF_FAKE_OFFER, Env:CDF_FAKE_ALLOW_MUTATION, Env:CDF_FAKE_LOCKS -ErrorAction SilentlyContinue
     }
     $calls = @()
     if (Test-Path $log) { $calls = @(Get-Content $log); Remove-Item $log -Force }
@@ -130,7 +132,9 @@ Assert-That ($failed.Text -match 'cdf-api already exists: its secrets are left a
 Assert-That ($failed.Text -notmatch 'containerapp create') 'state of the failed run: no app is created again'
 Assert-That ($failed.Text -match '\[dry run\] az ad app federated-credential create') 'state of the failed run: it gets past the step that failed and would create the credential'
 Assert-That ($failed.Text -match 'Service principal already exists') 'state of the failed run: the service principal is reused'
-Assert-That ($failed.Text -match '\[dry run\] az lock create --name lock-sql-server') 'state of the failed run: it goes on to the locks'
+Assert-That ($failed.Text -match '\[dry run\] az rest --method put --url https://management\.azure\.com/subscriptions/[0-9a-f-]+/resourceGroups/rg-control-diario-prod/providers/Microsoft\.Sql/servers/sql-cdf-prod-[0-9a-f]{6}/providers/Microsoft\.Authorization/locks/lock-sql-server\?api-version=2016-09-01') 'state of the failed run: it would lock the SQL server by its full resource id'
+Assert-That ($failed.Text -match '\[dry run\] az rest --method put --url \S+/servers/sql-cdf-prod-[0-9a-f]{6}/databases/ControlDiario/providers/Microsoft\.Authorization/locks/lock-sql-db\?api-version=2016-09-01') 'state of the failed run: it would lock the database by its full resource id'
+Assert-That (@($failed.Calls | Where-Object { $_ -like 'az lock *' }).Count -eq 0) 'state of the failed run: az lock is never called'
 Assert-That ($failed.Text -match '\[dry run\] az rest --method put') 'state of the failed run: it goes on to the budget'
 Assert-That ($failed.Text -match '\[dry run\] gh secret set AZURE_CLIENT_ID') 'state of the failed run: it reaches the GitHub secrets'
 
@@ -157,14 +161,30 @@ Assert-That (@($real.Calls | Where-Object { $_ -like 'UNHANDLED*' }).Count -eq 0
 Assert-That (@($real.Calls | Where-Object { $_ -match 'federated-credential create' -and $_ -like 'MUTATION*' }).Count -eq 1) 'real run: the federated credential is created once'
 Assert-That (@($real.Calls | Where-Object { $_ -like 'CREDENTIAL*' }) -contains 'CREDENTIAL name=github-main issuer=https://token.actions.githubusercontent.com subject=repo:isaias-muga@456/Control-Diario-Planta@123:ref:refs/heads/main audience=api://AzureADTokenExchange') 'real run: the credential file has the immutable-ID subject, the GitHub issuer and the Azure audience'
 Assert-That (@($real.Calls | Where-Object { $_ -like 'MUTATION az role assignment create*' }).Count -eq 4) 'real run: four role assignments (Reader, AcrPush, Contributor on each app)'
-Assert-That (@($real.Calls | Where-Object { $_ -like 'MUTATION az lock create*' }).Count -eq 2) 'real run: the two locks'
-Assert-That (@($real.Calls | Where-Object { $_ -like 'BUDGET amount=25 grain=Monthly alerts=3 emails=owner@example.com' }).Count -eq 1) 'real run: the budget body has USD 25, monthly, three alerts to the account e-mail'
+Assert-That (@($real.Calls | Where-Object { $_ -like 'az lock *' }).Count -eq 0) 'real run: az lock is never called'
+Assert-That (@($real.Calls | Where-Object { $_ -match '^LOCK id=\S+/providers/Microsoft\.Sql/servers/sql-cdf-prod-[0-9a-f]{6}/providers/Microsoft\.Authorization/locks/lock-sql-server level=CanNotDelete api=2016-09-01$' }).Count -eq 1) 'real run: the server lock is created once, CanNotDelete, by resource id'
+Assert-That (@($real.Calls | Where-Object { $_ -match '^LOCK id=\S+/providers/Microsoft\.Sql/servers/sql-cdf-prod-[0-9a-f]{6}/databases/ControlDiario/providers/Microsoft\.Authorization/locks/lock-sql-db level=CanNotDelete api=2016-09-01$' }).Count -eq 1) 'real run: the database lock is created once, CanNotDelete, by resource id'
+Assert-That (@($real.Calls | Where-Object { $_ -match '^BUDGET amount=25 grain=Monthly start=\d{4}-\d{2}-01T00:00:00Z end=\d{4}-\d{2}-01T00:00:00Z alerts=3 emails=owner@example\.com$' }).Count -eq 1) 'real run: the budget body has USD 25, monthly, a period from the 1st of a month, three alerts to the account e-mail'
+$budgetLine = @($real.Calls | Where-Object { $_ -like 'BUDGET*' })[0]
+$period = [regex]::Match($budgetLine, 'start=(\d{4})-\d{2}-01T\S* end=(\d{4})-')
+Assert-That (([int]$period.Groups[2].Value - [int]$period.Groups[1].Value) -eq 5) 'real run: the budget period is five years (the budgets API limits how long a budget can run)'
 Assert-That (@($real.Calls | Where-Object { $_ -like 'MUTATION gh secret set AZURE_*' }).Count -eq 3) 'real run: the three AZURE_* secrets are set'
 Assert-That (@($real.Calls | Where-Object { $_ -like 'MUTATION gh variable set ACR_NAME*' }).Count -eq 1) 'real run: ACR_NAME is set'
 Assert-That (@($real.Calls | Where-Object { $_ -match 'containerapp create|admin-password|--admin-password' }).Count -eq 0) 'real run: no app is created and no password or secret is sent (cdf-api exists)'
 Assert-That ($real.Text -notmatch 'Bootstrap admin password') 'real run: the admin password is not asked for again'
 $leftovers = @(Get-ChildItem ([System.IO.Path]::GetTempPath()) -Filter 'cdf-*.json' -ErrorAction SilentlyContinue)
 Assert-That ($leftovers.Count -eq 0) 'real run: the temporary JSON files are deleted'
+
+# The state the owner is in when the first lock call worked and the second failed: the server lock exists, the database one does not
+$realHalf = Invoke-Script 'credential' -Real -Locks 'lock-sql-server'
+Assert-That ($realHalf.Code -eq 0) "server lock already there, real run: exit code 0 (got $($realHalf.Code))"
+Assert-That (@($realHalf.Calls | Where-Object { $_ -like 'LOCK id=*' }).Count -eq 1) 'server lock already there: only one lock is created'
+Assert-That (@($realHalf.Calls | Where-Object { $_ -like 'LOCK id=*lock-sql-db*' }).Count -eq 1) 'server lock already there: the one created is the database lock'
+Assert-That ($realHalf.Text -match 'Lock lock-sql-server already exists') 'server lock already there: it says so and skips it'
+
+$realBoth = Invoke-Script 'credential' -Real -Locks 'lock-sql-server,lock-sql-db'
+Assert-That ($realBoth.Code -eq 0) "both locks already there, real run: exit code 0 (got $($realBoth.Code))"
+Assert-That (@($realBoth.Calls | Where-Object { $_ -like 'LOCK id=*' }).Count -eq 0) 'both locks already there: no lock is created again'
 
 $realStale = Invoke-Script 'stalecredential' -Real
 Assert-That ($realStale.Code -eq 0) "stale credential, real run: exit code 0 (got $($realStale.Code))"

@@ -191,6 +191,20 @@ function Invoke-WithRetry([scriptblock]$Action, [int]$Attempts = 4, [int]$DelayS
     }
 }
 
+# A delete lock, by the full resource id and a plain ARM call (az rest). `az lock create --resource-type ... --parent ...` fails on a child
+# resource such as a database ("No value for given attribute" inside the Azure CLI), so every lock goes through this one form. PUT is
+# idempotent: if the lock is already there with the same level it changes nothing, so a failed or repeated GET cannot cause an error.
+function Confirm-DeleteLock([string]$ResourceId, [string]$LockName, [string]$Notes) {
+    $lockUrl = "https://management.azure.com$ResourceId/providers/Microsoft.Authorization/locks/$LockName`?api-version=2016-09-01"
+    if ((Invoke-Az -CliArgs @('rest', '--method', 'get', '--url', $lockUrl, '--output', 'none') -ReadOnly -AllowFail).ExitCode -eq 0) {
+        Write-Info "Lock $LockName already exists."
+        return
+    }
+    $lockFile = Write-TempJson @{ properties = @{ level = 'CanNotDelete'; notes = $Notes } }
+    try { Invoke-Az -CliArgs @('rest', '--method', 'put', '--url', $lockUrl, '--body', "@$lockFile", '--output', 'none') | Out-Null }
+    finally { Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue }
+}
+
 function Confirm-Role([string]$PrincipalId, [string]$Role, [string]$Scope) {
     $count = Get-AzValue @('role', 'assignment', 'list', '--assignee', $PrincipalId, '--role', $Role, '--scope', $Scope, '--query', 'length(@)', '--output', 'tsv')
     if ($count -and [int]$count -gt 0) { Write-Info "Role $Role already assigned on $Scope."; return }
@@ -501,14 +515,10 @@ else {
 # Locks: the GitHub identity (Contributor) cannot remove them, so it cannot delete the production data
 # ---------------------------------------------------------------------------------------------------------------------------------
 Write-Step 'Delete locks on the SQL server and the database'
-if (Test-AzExists @('lock', 'show', '--name', 'lock-sql-server', '--resource-group', $ResourceGroup, '--resource-name', $SqlServer, '--resource-type', 'Microsoft.Sql/servers')) { Write-Info 'Server lock already exists.' }
-else {
-    Invoke-Az -CliArgs @('lock', 'create', '--name', 'lock-sql-server', '--lock-type', 'CanNotDelete', '--resource-group', $ResourceGroup, '--resource-name', $SqlServer, '--resource-type', 'Microsoft.Sql/servers') | Out-Null
-}
-if (Test-AzExists @('lock', 'show', '--name', 'lock-sql-db', '--resource-group', $ResourceGroup, '--resource-name', $DatabaseName, '--resource-type', 'Microsoft.Sql/servers/databases', '--parent', "servers/$SqlServer")) { Write-Info 'Database lock already exists.' }
-else {
-    Invoke-Az -CliArgs @('lock', 'create', '--name', 'lock-sql-db', '--lock-type', 'CanNotDelete', '--resource-group', $ResourceGroup, '--resource-name', $DatabaseName, '--resource-type', 'Microsoft.Sql/servers/databases', '--parent', "servers/$SqlServer") | Out-Null
-}
+$SqlServerId = "$GroupScope/providers/Microsoft.Sql/servers/$SqlServer"
+$DatabaseId = "$SqlServerId/databases/$DatabaseName"
+Confirm-DeleteLock -ResourceId $SqlServerId -LockName 'lock-sql-server' -Notes 'Production SQL server: do not delete.'
+Confirm-DeleteLock -ResourceId $DatabaseId -LockName 'lock-sql-db' -Notes 'Production database: do not delete.'
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 # Budget alert
@@ -523,7 +533,7 @@ else {
             category      = 'Cost'
             amount        = $BudgetAmountUsd
             timeGrain     = 'Monthly'
-            timePeriod    = @{ startDate = (Get-Date -Day 1).ToString('yyyy-MM-01') + 'T00:00:00Z'; endDate = '2036-12-31T00:00:00Z' }
+            timePeriod    = @{ startDate = (Get-Date -Day 1).ToString('yyyy-MM-01') + 'T00:00:00Z'; endDate = (Get-Date -Day 1).AddYears(5).ToString('yyyy-MM-01') + 'T00:00:00Z' }
             notifications = @{
                 actual80    = (& $notification 80 'Actual')
                 actual100   = (& $notification 100 'Actual')

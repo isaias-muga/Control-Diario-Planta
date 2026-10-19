@@ -7,6 +7,7 @@
 #   stalecredential  like failedrun, with a federated credential whose subject is wrong
 # $env:CDF_FAKE_ALLOW_MUTATION=1 lets commands that change things succeed (and logs them), for a run of the script that is not a dry run;
 # the files passed as @file (federated credential, budget) are read and their content is logged.
+# $env:CDF_FAKE_LOCKS is a comma list of the delete locks that already exist (lock-sql-server, lock-sql-db); default none.
 # $env:CDF_FAKE_OFFER overrides the subscription offer (default PayAsYouGo_2014-09-01). Every call is appended to $env:CDF_FAKE_LOG.
 # Anything it does not know is logged as UNHANDLED and fails, so a new read-only call in the script cannot go unnoticed.
 [CmdletBinding(PositionalBinding = $false)]
@@ -43,6 +44,17 @@ elseif ($tool -eq 'az') {
     switch -Regex ($command) {
         '^account show' { Reply ('{"id":"' + $subscriptionId + '","tenantId":"22222222-2222-2222-2222-222222222222","name":"Fake subscription","user":{"name":"owner@example.com","type":"user"}}') }
         '^rest --method get --url https://management\.azure\.com/subscriptions/[^/ ]+\?api-version' { Reply ('{"subscriptionPolicies":{"quotaId":"' + $offer + '","spendingLimit":"Off"}}') }
+        '^rest --method get --url \S+/providers/Microsoft\.Authorization/locks/' {
+            # A lock is addressed by the full resource id of the thing it protects (never az lock with a resource type and a parent)
+            $serverUrl = "https://management.azure.com$group/providers/Microsoft.Sql/servers/sql-cdf-prod-[0-9a-f]{6}"
+            if ($command -match ("^rest --method get --url $serverUrl/providers/Microsoft\.Authorization/locks/(lock-sql-server)\?api-version=2016-09-01 --output none") -or
+                $command -match ("^rest --method get --url $serverUrl/databases/ControlDiario/providers/Microsoft\.Authorization/locks/(lock-sql-db)\?api-version=2016-09-01 --output none")) {
+                $present = @(($env:CDF_FAKE_LOCKS -split ',') | Where-Object { $_ })
+                Exists ($present -contains $Matches[1])
+            }
+            [Console]::Error.WriteLine('fake-cli: lock called with an unexpected resource id or arguments: ' + $command)
+            exit 2
+        }
         '^rest --method get --url .*budgets' { NotFound }
         '^provider show' { Reply 'Registered' }
         '^group show' { Exists $built 'brazilsouth' }
@@ -79,7 +91,6 @@ elseif ($tool -eq 'az') {
             NotFound
         }
         '^ad app federated-credential list' { Reply '[]' } # what the first run parsed; the script must not ask for it any more
-        '^lock show' { NotFound }
     }
 }
 
@@ -88,12 +99,16 @@ if ($env:CDF_FAKE_ALLOW_MUTATION -eq '1' -and "$tool $command" -match $changes) 
     if ($command -match '--(parameters|body) @(\S+)') {
         $file = $Matches[2]
         $json = Get-Content -Raw -LiteralPath $file | ConvertFrom-Json
-        if ($command -match 'federated-credential') {
+        if ($command -match 'locks/') {
+            $lockId = ($command -replace '^.*--url https://management\.azure\.com', '') -replace '\?api-version.*$', ''
+            Add-Content -LiteralPath $env:CDF_FAKE_LOG -Value "LOCK id=$lockId level=$($json.properties.level) api=$(if ($command -match 'api-version=2016-09-01') { '2016-09-01' } else { 'other' })"
+        }
+        elseif ($command -match 'federated-credential') {
             Add-Content -LiteralPath $env:CDF_FAKE_LOG -Value "CREDENTIAL name=$($json.name) issuer=$($json.issuer) subject=$($json.subject) audience=$(@($json.audiences) -join ',')"
         }
         else {
             $emails = @($json.properties.notifications.PSObject.Properties | ForEach-Object { $_.Value.contactEmails } | Select-Object -Unique) -join ','
-            Add-Content -LiteralPath $env:CDF_FAKE_LOG -Value "BUDGET amount=$($json.properties.amount) grain=$($json.properties.timeGrain) alerts=$(@($json.properties.notifications.PSObject.Properties).Count) emails=$emails"
+            Add-Content -LiteralPath $env:CDF_FAKE_LOG -Value "BUDGET amount=$($json.properties.amount) grain=$($json.properties.timeGrain) start=$($json.properties.timePeriod.startDate) end=$($json.properties.timePeriod.endDate) alerts=$(@($json.properties.notifications.PSObject.Properties).Count) emails=$emails"
         }
     }
     Add-Content -LiteralPath $env:CDF_FAKE_LOG -Value "MUTATION $tool $command"
