@@ -52,6 +52,8 @@ namespace DairyControl.Application.Tests
         [Theory]
         [InlineData("")]
         [InlineData("Superman")]
+        [InlineData("3")]
+        [InlineData("0")]
         public async Task CrearAsync_InvalidRol_ThrowsReglaDeNegocioExceptionOnRol(string rol)
         {
             // Arrange
