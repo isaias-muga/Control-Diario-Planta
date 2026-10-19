@@ -75,6 +75,22 @@ namespace DairyControl.Api.Tests
             metodo + " " + System.Text.RegularExpressions.Regex.Replace(ruta.Split('?')[0].TrimStart('/'), "[0-9a-f]{8}-[0-9a-f-]{27}", "{id}");
 
         [Fact]
+        public void NoEndpoint_AcceptsDelete_AndTheMatrixHasNoDeleteRow()
+        {
+            // Arrange: every endpoint the application really maps
+            var metodos = _fabrica.Services.GetServices<EndpointDataSource>().SelectMany(f => f.Endpoints).OfType<RouteEndpoint>()
+                .Select(e => e.Metadata.GetMetadata<HttpMethodMetadata>())
+                .Where(m => m is not null)
+                .SelectMany(m => m!.HttpMethods)
+                .ToList();
+
+            // Act & Assert: nothing is ever deleted (data is corrected, voided or deactivated), so no route answers DELETE
+            Assert.True(metodos.Count >= 19, "Expected the endpoints, found " + metodos.Count);
+            Assert.DoesNotContain("DELETE", metodos, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(Filas, f => f.Metodo.Equals("DELETE", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
         public void Matrix_CoversEveryEndpointOfTheControllers()
         {
             // Arrange: every controller endpoint the application really maps (the anonymous login is tested apart)

@@ -567,5 +567,56 @@ namespace DairyControl.Application.Tests
             // Assert
             escenario.Recepciones.Verify(r => r.AddAsync(It.Is<RecepcionLeche>(x => x.FechaHora == new DateTime(2026, 10, 15, 12, 30, 0))), Times.Once);
         }
+
+        [Fact]
+        public async Task GetOpcionesAsync_InactiveProveedor_IsLeftOutOfTheOptions()
+        {
+            // Arrange
+            var escenario = new Escenario();
+            var activo = Proveedor.Crear("Tambo Activo", Guid.NewGuid());
+            var inactivo = Proveedor.Crear("Tambo Cerrado", Guid.NewGuid());
+            inactivo.Desactivar(MotivoDeCambio.Create("Cerró el tambo"), Guid.NewGuid(), new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc));
+            escenario.Proveedores.Setup(p => p.GetAllAsync()).ReturnsAsync([activo, inactivo]);
+
+            // Act
+            var result = await escenario.Servicio().GetOpcionesAsync();
+
+            // Assert
+            var opcion = Assert.Single(result);
+            Assert.Equal(activo.Id, opcion.Id);
+        }
+
+        [Fact]
+        public async Task RegistrarRecepcionAsync_InactiveProveedor_Throws400OnProveedorIdAndSavesNothing()
+        {
+            // Arrange
+            var escenario = new Escenario();
+            var inactivo = Proveedor.Crear("Tambo Cerrado", Guid.NewGuid());
+            inactivo.Desactivar(MotivoDeCambio.Create("Cerró el tambo"), Guid.NewGuid(), new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc));
+            escenario.Proveedores.Setup(p => p.GetByIdAsync(escenario.ProveedorId)).ReturnsAsync(inactivo);
+
+            // Act
+            var ex = await Assert.ThrowsAsync<ReglaDeNegocioException>(() => escenario.Servicio().RegistrarRecepcionAsync(escenario.ProveedorId, Dto()));
+
+            // Assert
+            Assert.Equal("proveedorId", ex.Campo);
+            escenario.VerificarNadaGuardado();
+        }
+
+        [Fact]
+        public async Task RegistrarRecepcionAsync_TicketOfAVoidedRecepcion_MessageSaysItCannotBeReused()
+        {
+            // Arrange
+            var escenario = new Escenario();
+            escenario.Recepciones.Setup(r => r.GetTicketRegistradoAsync(6311))
+                .ReturnsAsync(new TicketRegistrado("Tambo Las Acacias", new DateTime(2026, 10, 11, 7, 0, 0), anulada: true));
+
+            // Act
+            var ex = await Assert.ThrowsAsync<TicketDuplicadoException>(() => escenario.Servicio().RegistrarRecepcionAsync(escenario.ProveedorId, Dto(ticket: 6311)));
+
+            // Assert
+            Assert.Equal("El ticket 6311 ya está registrado en una recepción anulada, y no se puede reutilizar (Tambo Las Acacias, 11/10/2026)", ex.Message);
+            escenario.VerificarNadaGuardado();
+        }
     }
 }

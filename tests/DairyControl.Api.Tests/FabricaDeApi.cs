@@ -44,6 +44,8 @@ namespace DairyControl.Api.Tests
         public Mock<IProveedorRepository> Proveedores { get; } = new();
         public Mock<IRecepcionRepository> Recepciones { get; } = new();
         public Mock<IConfiguracionCalidadRepository> Configuracion { get; } = new();
+        public Mock<IHistorialQueries> Historial { get; } = new();
+        public Mock<IProveedorQueries> ProveedorQueries { get; } = new();
 
         public FabricaDeApi()
         {
@@ -65,9 +67,9 @@ namespace DairyControl.Api.Tests
                 Reemplazar(servicios, Operarios.Object);
                 Reemplazar(servicios, Proveedores.Object);
                 Reemplazar(servicios, Recepciones.Object);
-                Reemplazar(servicios, new Mock<IProveedorQueries>().Object);
+                Reemplazar(servicios, ProveedorQueries.Object);
                 Reemplazar(servicios, new Mock<IRecepcionQueries>().Object);
-                Reemplazar(servicios, new Mock<IHistorialQueries>().Object);
+                Reemplazar(servicios, Historial.Object);
                 Reemplazar(servicios, Configuracion.Object);
 
                 // /health asks the database: here there is none
