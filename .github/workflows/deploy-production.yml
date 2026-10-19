@@ -1,0 +1,128 @@
+name: Deploy production
+
+# Manual only: run it from the Actions tab (Run workflow, branch main). A merge to main never deploys.
+# To roll back, run it again and pass the previous commit in "sha": its images are already in the registry, so nothing is rebuilt.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit to deploy (full or short SHA). Empty = the tip of main. For a rollback, the previous SHA."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  actions: read # to check that CI passed on the commit
+  id-token: write # request the OIDC token for Azure
+
+# One deploy at a time; a second one waits instead of cancelling a running one.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: rg-control-diario-prod
+
+jobs:
+  deploy:
+    # The federated credential in Azure only accepts runs from main as well
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Choose the commit
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          requested="${INPUT_SHA:-origin/main}"
+          full="$(git rev-parse --verify "${requested}^{commit}")"
+          # Only commits that are part of main can reach production
+          if ! git merge-base --is-ancestor "$full" origin/main; then
+            echo "::error::$full is not part of main."
+            exit 1
+          fi
+          git checkout --detach "$full"
+          echo "FULL_SHA=$full" >> "$GITHUB_ENV"
+          echo "TAG=$(git rev-parse --short=7 "$full")" >> "$GITHUB_ENV"
+
+      - name: Check that CI passed on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          passed="$(gh run list --workflow ci.yml --commit "$FULL_SHA" --status success --json databaseId --jq length)"
+          if [ "$passed" -lt 1 ]; then
+            echo "::error::CI has not passed on $FULL_SHA."
+            exit 1
+          fi
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to the container registry
+        env:
+          ACR_NAME: ${{ vars.ACR_NAME }}
+        run: |
+          if [ -z "$ACR_NAME" ]; then
+            echo "::error::The repository variable ACR_NAME is missing (infra/production.ps1 sets it)."
+            exit 1
+          fi
+          az acr login --name "$ACR_NAME"
+          echo "REGISTRY=$ACR_NAME.azurecr.io" >> "$GITHUB_ENV"
+
+      - name: Build and push the API image
+        env:
+          ACR_NAME: ${{ vars.ACR_NAME }}
+        run: |
+          if az acr repository show --name "$ACR_NAME" --image "cdf-api:$TAG" --output none 2>/dev/null; then
+            echo "cdf-api:$TAG is already in the registry; not rebuilding."
+          else
+            docker build -f src/DairyControl.Api/Dockerfile -t "$REGISTRY/cdf-api:$TAG" .
+            docker push "$REGISTRY/cdf-api:$TAG"
+          fi
+
+      - name: Build and push the client image
+        env:
+          ACR_NAME: ${{ vars.ACR_NAME }}
+        run: |
+          if az acr repository show --name "$ACR_NAME" --image "cdf-client:$TAG" --output none 2>/dev/null; then
+            echo "cdf-client:$TAG is already in the registry; not rebuilding."
+          else
+            docker build -t "$REGISTRY/cdf-client:$TAG" client
+            docker push "$REGISTRY/cdf-client:$TAG"
+          fi
+
+      - name: Install the Container Apps CLI extension
+        run: az extension add --name containerapp --upgrade --only-show-errors
+
+      # The YAML files hold the whole template (image, resources, variables, probes); the secrets, the ingress and the registry
+      # identity were set by infra/production.ps1 and are not touched here.
+      - name: Deploy the API
+        run: |
+          sed -e "s|__IMAGE__|$REGISTRY/cdf-api:$TAG|" infra/containerapps/cdf-api.yaml > "$RUNNER_TEMP/cdf-api.yaml"
+          az containerapp update --name cdf-api --resource-group "$RESOURCE_GROUP" --yaml "$RUNNER_TEMP/cdf-api.yaml" --only-show-errors
+          # infra/production.ps1 created the app with a placeholder image on port 80; from here on the real port is 8080
+          az containerapp ingress update --name cdf-api --resource-group "$RESOURCE_GROUP" --target-port 8080 --only-show-errors
+
+      - name: Deploy the client
+        run: |
+          api_fqdn="$(az containerapp show --name cdf-api --resource-group "$RESOURCE_GROUP" --query properties.configuration.ingress.fqdn --output tsv)"
+          sed -e "s|__IMAGE__|$REGISTRY/cdf-client:$TAG|" -e "s|__API_UPSTREAM__|https://$api_fqdn|" \
+            infra/containerapps/cdf-client.yaml > "$RUNNER_TEMP/cdf-client.yaml"
+          az containerapp update --name cdf-client --resource-group "$RESOURCE_GROUP" --yaml "$RUNNER_TEMP/cdf-client.yaml" --only-show-errors
+          az containerapp ingress update --name cdf-client --resource-group "$RESOURCE_GROUP" --target-port 8080 --only-show-errors
+
+      - name: Wait for the site to answer
+        run: |
+          fqdn="$(az containerapp show --name cdf-client --resource-group "$RESOURCE_GROUP" --query properties.configuration.ingress.fqdn --output tsv)"
+          echo "Checking https://$fqdn/health (the API and its database, through the client)"
+          curl --fail --silent --show-error --retry 60 --retry-delay 5 --retry-all-errors --retry-connrefused "https://$fqdn/health"
+          echo
+          echo "Deployed $TAG to https://$fqdn"

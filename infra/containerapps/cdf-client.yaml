@@ -1,0 +1,41 @@
+# Definition of the production client container app (nginx with the Angular build, proxying /api to the internal API), applied by
+# .github/workflows/deploy-production.yml with `az containerapp update --yaml` after __IMAGE__ and __API_UPSTREAM__ are replaced.
+# The probes look at the static page, not at /health: the client's /health goes through to the API, and the client must not be
+# restarted because the API or the database is down.
+properties:
+  template:
+    containers:
+      - name: cdf-client
+        image: __IMAGE__
+        resources:
+          cpu: 0.25
+          memory: 0.5Gi
+        env:
+          - name: API_UPSTREAM
+            value: __API_UPSTREAM__
+        probes:
+          - type: Startup
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 30
+          - type: Liveness
+            httpGet:
+              path: /
+              port: 8080
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          - type: Readiness
+            httpGet:
+              path: /
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+    scale:
+      minReplicas: 1
+      maxReplicas: 1
