@@ -48,11 +48,11 @@ namespace DairyControl.Application.Services
 
         public Task<IReadOnlyList<ProveedorDto>> GetAllAsync() => _queries.GetAllAsync();
 
-        /// <summary>Id and name only, for choosing a proveedor (the reception phone gets no counts).</summary>
+        /// <summary>Id and name only, for choosing a proveedor for a new recepción (the reception phone gets no counts). Inactive ones are left out.</summary>
         public async Task<IReadOnlyList<ProveedorOpcionDto>> GetOpcionesAsync()
         {
             var proveedores = await _proveedores.GetAllAsync();
-            return proveedores.Select(p => new ProveedorOpcionDto { Id = p.Id, Nombre = p.Nombre }).ToList();
+            return proveedores.Where(p => p.Activo).Select(p => new ProveedorOpcionDto { Id = p.Id, Nombre = p.Nombre }).ToList();
         }
 
         public async Task<RecepcionRegistradaDto?> RegistrarRecepcionAsync(Guid proveedorId, RegistrarRecepcionDto dto)
@@ -60,6 +60,8 @@ namespace DairyControl.Application.Services
             var proveedor = await _proveedores.GetByIdAsync(proveedorId);
             if (proveedor is null)
                 return null;
+            if (!proveedor.Activo)
+                throw new ReglaDeNegocioException("El proveedor está desactivado: no se le pueden registrar recepciones.", "proveedorId");
 
             // The audit data comes from the token and the PIN, never from the request body
             var usuarioId = UsuarioActualId();
@@ -109,10 +111,11 @@ namespace DairyControl.Application.Services
         private Guid UsuarioActualId() =>
             _actual.Id ?? throw new InvalidOperationException("No hay un usuario autenticado en la solicitud.");
 
-        private static string MensajeTicketDuplicado(int ticket, TicketRegistrado? existente) =>
+        // A voided recepción keeps its ticket used: the message says so, because the number looks free in the list
+        internal static string MensajeTicketDuplicado(int ticket, TicketRegistrado? existente) =>
             existente is null
                 ? $"El ticket {ticket} ya está registrado"
                 : string.Create(CultureInfo.InvariantCulture,
-                    $"El ticket {ticket} ya está registrado ({existente.ProveedorNombre}, {existente.FechaHora:dd/MM/yyyy})");
+                    $"El ticket {ticket} ya está registrado{(existente.Anulada ? " en una recepción anulada, y no se puede reutilizar" : string.Empty)} ({existente.ProveedorNombre}, {existente.FechaHora:dd/MM/yyyy})");
     }
 }

@@ -67,6 +67,7 @@ namespace DairyControl.Api.Tests
                 Reemplazar(servicios, Recepciones.Object);
                 Reemplazar(servicios, new Mock<IProveedorQueries>().Object);
                 Reemplazar(servicios, new Mock<IRecepcionQueries>().Object);
+                Reemplazar(servicios, new Mock<IHistorialQueries>().Object);
                 Reemplazar(servicios, Configuracion.Object);
 
                 // /health asks the database: here there is none
