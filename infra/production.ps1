@@ -124,6 +124,15 @@ function Get-AzValue([object[]]$CliArgs) {
     return $r.Output
 }
 
+# The subject of the federated credential called $Name on the app registration, or '' when there is none. It asks az for that one
+# credential only (show by name, tsv), so no JSON list is parsed: in Windows PowerShell 5.1 ConvertFrom-Json '[]' is not enumerated and
+# reading a property of it fails under strict mode (this is what stopped the first run).
+function Get-FederatedCredentialSubject([string]$AppId, [string]$Name) {
+    $text = Get-AzValue @('ad', 'app', 'federated-credential', 'show', '--id', $AppId, '--federated-credential-id', $Name, '--query', 'subject', '--output', 'tsv')
+    if (-not $text) { return '' }
+    return (@($text -split "`r?`n") | Select-Object -First 1).Trim()
+}
+
 function Test-AzExists([object[]]$CliArgs) {
     return ((Invoke-Az -CliArgs ($CliArgs + @('--output', 'none')) -ReadOnly -AllowFail).ExitCode -eq 0)
 }
@@ -180,6 +189,43 @@ function Invoke-WithRetry([scriptblock]$Action, [int]$Attempts = 4, [int]$DelayS
             if (-not $DryRun) { Start-Sleep -Seconds $DelaySeconds }
         }
     }
+}
+
+# A delete lock, by the full resource id and a plain ARM call (az rest). `az lock create --resource-type ... --parent ...` fails on a child
+# resource such as a database ("No value for given attribute" inside the Azure CLI), so every lock goes through this one form. PUT is
+# idempotent: if the lock is already there with the same level it changes nothing, so a failed or repeated GET cannot cause an error.
+function Confirm-DeleteLock([string]$ResourceId, [string]$LockName, [string]$Notes) {
+    $lockUrl = "https://management.azure.com$ResourceId/providers/Microsoft.Authorization/locks/$LockName`?api-version=2016-09-01"
+    if ((Invoke-Az -CliArgs @('rest', '--method', 'get', '--url', $lockUrl, '--output', 'none') -ReadOnly -AllowFail).ExitCode -eq 0) {
+        Write-Info "Lock $LockName already exists."
+        return
+    }
+    $lockFile = Write-TempJson @{ properties = @{ level = 'CanNotDelete'; notes = $Notes } }
+    try { Invoke-Az -CliArgs @('rest', '--method', 'put', '--url', $lockUrl, '--body', "@$lockFile", '--output', 'none') | Out-Null }
+    finally { Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue }
+}
+
+# The budget is a nice-to-have: if Azure refuses it (Cost Management can take up to 48 hours to work on a subscription that was just
+# upgraded to pay-as-you-go), the script warns, tells how to create it by hand, and goes on.
+function Write-BudgetWarning([string]$Reason) {
+    $detail = ((@($Reason -split "`r?`n") | Select-Object -Skip 1) -join ' ').Trim()
+    if ($detail.Length -gt 400) { $detail = $detail.Substring(0, 400) + '...' }
+    $lines = @(
+        '',
+        'WARNING: the budget alert was NOT created. Everything else was done, and the deploy does not depend on it.',
+        "Azure answered: $detail",
+        "Most likely reason: right after an upgrade to pay-as-you-go, Cost Management can take up to 48 hours to become available on the",
+        "subscription, and until then even an Owner is refused (RBACAccessDenied / Unauthorized). Logging out and in again does not change that.",
+        'To get the alert: run this script again later (it is safe to repeat; it will only create the budget), or create it by hand now:',
+        "  1. Azure portal > Resource groups > $ResourceGroup > Cost Management > Budgets > Add.",
+        "  2. Name: $BudgetName. Reset period: Monthly. Creation date: the 1st of this month. Expiration: about 5 years from now.",
+        "  3. Amount: $BudgetAmountUsd (USD).",
+        "  4. Alert conditions, three of them: Actual, 80 % of budget; Actual, 100 %; Forecasted, 100 %.",
+        "     Alert recipients (e-mail): $budgetEmail",
+        '  5. Create.',
+        ''
+    )
+    foreach ($line in $lines) { Write-Host $line -ForegroundColor Yellow }
 }
 
 function Confirm-Role([string]$PrincipalId, [string]$Role, [string]$Scope) {
@@ -458,14 +504,13 @@ $credentialBody = @{
     description = "Deploy production from main of $ownerName/$repoName (immutable-ID subject)"
     audiences   = @('api://AzureADTokenExchange')
 }
-$credentialList = Get-AzValue @('ad', 'app', 'federated-credential', 'list', '--id', $deployAppId, '--output', 'json')
-$existingCredential = $null
-if ($credentialList) { $existingCredential = @($credentialList | ConvertFrom-Json) | Where-Object { $_.name -eq $FederatedCredentialName } | Select-Object -First 1 }
-if ($existingCredential -and $existingCredential.subject -eq $federatedSubject) { Write-Info 'Federated credential already exists with the right subject.' }
+$existingSubject = Get-FederatedCredentialSubject $deployAppId $FederatedCredentialName
+$credentialExists = ($existingSubject -ne '')
+if ($credentialExists -and $existingSubject -eq $federatedSubject) { Write-Info 'Federated credential already exists with the right subject.' }
 else {
     $credentialFile = Write-TempJson $credentialBody
     try {
-        if ($existingCredential) {
+        if ($credentialExists) {
             Invoke-WithRetry { Invoke-Az -CliArgs @('ad', 'app', 'federated-credential', 'update', '--id', $deployAppId, '--federated-credential-id', $FederatedCredentialName, '--parameters', "@$credentialFile") | Out-Null }
         }
         else {
@@ -493,40 +538,10 @@ else {
 # Locks: the GitHub identity (Contributor) cannot remove them, so it cannot delete the production data
 # ---------------------------------------------------------------------------------------------------------------------------------
 Write-Step 'Delete locks on the SQL server and the database'
-if (Test-AzExists @('lock', 'show', '--name', 'lock-sql-server', '--resource-group', $ResourceGroup, '--resource-name', $SqlServer, '--resource-type', 'Microsoft.Sql/servers')) { Write-Info 'Server lock already exists.' }
-else {
-    Invoke-Az -CliArgs @('lock', 'create', '--name', 'lock-sql-server', '--lock-type', 'CanNotDelete', '--resource-group', $ResourceGroup, '--resource-name', $SqlServer, '--resource-type', 'Microsoft.Sql/servers') | Out-Null
-}
-if (Test-AzExists @('lock', 'show', '--name', 'lock-sql-db', '--resource-group', $ResourceGroup, '--resource-name', $DatabaseName, '--resource-type', 'Microsoft.Sql/servers/databases', '--parent', "servers/$SqlServer")) { Write-Info 'Database lock already exists.' }
-else {
-    Invoke-Az -CliArgs @('lock', 'create', '--name', 'lock-sql-db', '--lock-type', 'CanNotDelete', '--resource-group', $ResourceGroup, '--resource-name', $DatabaseName, '--resource-type', 'Microsoft.Sql/servers/databases', '--parent', "servers/$SqlServer") | Out-Null
-}
-
-# ---------------------------------------------------------------------------------------------------------------------------------
-# Budget alert
-# ---------------------------------------------------------------------------------------------------------------------------------
-Write-Step "Budget alert of USD $BudgetAmountUsd a month"
-$budgetUrl = "https://management.azure.com$GroupScope/providers/Microsoft.Consumption/budgets/$BudgetName`?api-version=2023-05-01"
-if ((Invoke-Az -CliArgs @('rest', '--method', 'get', '--url', $budgetUrl, '--output', 'none') -ReadOnly -AllowFail).ExitCode -eq 0) { Write-Info 'Budget already exists.' }
-else {
-    $notification = { param($threshold, $type) @{ enabled = $true; operator = 'GreaterThan'; threshold = $threshold; thresholdType = $type; contactEmails = @($budgetEmail) } }
-    $budgetBody = @{
-        properties = @{
-            category      = 'Cost'
-            amount        = $BudgetAmountUsd
-            timeGrain     = 'Monthly'
-            timePeriod    = @{ startDate = (Get-Date -Day 1).ToString('yyyy-MM-01') + 'T00:00:00Z'; endDate = '2036-12-31T00:00:00Z' }
-            notifications = @{
-                actual80    = (& $notification 80 'Actual')
-                actual100   = (& $notification 100 'Actual')
-                forecast100 = (& $notification 100 'Forecast')
-            }
-        }
-    }
-    $budgetFile = Write-TempJson $budgetBody
-    try { Invoke-Az -CliArgs @('rest', '--method', 'put', '--url', $budgetUrl, '--body', "@$budgetFile", '--output', 'none') | Out-Null }
-    finally { Remove-Item -LiteralPath $budgetFile -Force -ErrorAction SilentlyContinue }
-}
+$SqlServerId = "$GroupScope/providers/Microsoft.Sql/servers/$SqlServer"
+$DatabaseId = "$SqlServerId/databases/$DatabaseName"
+Confirm-DeleteLock -ResourceId $SqlServerId -LockName 'lock-sql-server' -Notes 'Production SQL server: do not delete.'
+Confirm-DeleteLock -ResourceId $DatabaseId -LockName 'lock-sql-db' -Notes 'Production database: do not delete.'
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 # GitHub: what the deploy workflow reads (identifiers, not secrets of value; stored as repository secrets as agreed)
@@ -538,6 +553,37 @@ Invoke-Gh -CliArgs @('secret', 'set', 'AZURE_SUBSCRIPTION_ID', '--repo', $GitHub
 Invoke-Gh -CliArgs @('variable', 'set', 'ACR_NAME', '--repo', $GitHubRepo, '--body', $AcrName) | Out-Null
 
 # ---------------------------------------------------------------------------------------------------------------------------------
+# Budget alert
+# ---------------------------------------------------------------------------------------------------------------------------------
+Write-Step "Budget alert of USD $BudgetAmountUsd a month"
+$budgetCreated = $false
+$budgetUrl = "https://management.azure.com$GroupScope/providers/Microsoft.Consumption/budgets/$BudgetName`?api-version=2023-05-01"
+if ((Invoke-Az -CliArgs @('rest', '--method', 'get', '--url', $budgetUrl, '--output', 'none') -ReadOnly -AllowFail).ExitCode -eq 0) { Write-Info 'Budget already exists.'; $budgetCreated = $true }
+else {
+    $notification = { param($threshold, $type) @{ enabled = $true; operator = 'GreaterThan'; threshold = $threshold; thresholdType = $type; contactEmails = @($budgetEmail) } }
+    $budgetBody = @{
+        properties = @{
+            category      = 'Cost'
+            amount        = $BudgetAmountUsd
+            timeGrain     = 'Monthly'
+            timePeriod    = @{ startDate = (Get-Date -Day 1).ToString('yyyy-MM-01') + 'T00:00:00Z'; endDate = (Get-Date -Day 1).AddYears(5).ToString('yyyy-MM-01') + 'T00:00:00Z' }
+            notifications = @{
+                actual80    = (& $notification 80 'Actual')
+                actual100   = (& $notification 100 'Actual')
+                forecast100 = (& $notification 100 'Forecast')
+            }
+        }
+    }
+    $budgetFile = Write-TempJson $budgetBody
+    try {
+        Invoke-Az -CliArgs @('rest', '--method', 'put', '--url', $budgetUrl, '--body', "@$budgetFile", '--output', 'none') | Out-Null
+        $budgetCreated = $true
+    }
+    catch { Write-BudgetWarning $_.Exception.Message }
+    finally { Remove-Item -LiteralPath $budgetFile -Force -ErrorAction SilentlyContinue }
+}
+
+# ---------------------------------------------------------------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------------------------------------------------------------
 Write-Step 'Done'
@@ -547,6 +593,8 @@ Write-Info "Production address : https://$clientFqdn"
 Write-Info "Resource group     : $ResourceGroup"
 Write-Info "Registry           : $AcrServer"
 Write-Info "SQL server         : $sqlFqdn (database $DatabaseName)"
+if ($budgetCreated) { Write-Info "Budget             : $BudgetName (USD $BudgetAmountUsd a month)" }
+else { Write-Host '   Budget             : NOT created (see the yellow warning above); run this script again later or create it by hand' -ForegroundColor Yellow }
 Write-Host ''
 Write-Host 'Next: check each resource in the Azure portal (docs/production.md, "What to check afterwards"), then run the workflow' -ForegroundColor Green
 Write-Host '"Deploy production" from the Actions tab of the repository. Until it runs, the address shows a placeholder page, not the app.' -ForegroundColor Green
