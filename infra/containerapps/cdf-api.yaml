@@ -1,0 +1,63 @@
+# Definition of the production API container app, applied by .github/workflows/deploy-production.yml with
+# `az containerapp update --yaml` after __IMAGE__ is replaced by the image of the commit being deployed.
+# Only names of secrets appear here (secretRef); the secret values were set once by infra/production.ps1 and never live in a file.
+# AdminUser__ForzarCambioPassword is deliberately NOT set: production keeps the default (true), so the bootstrap admin must choose its
+# own password at the first login.
+properties:
+  template:
+    containers:
+      - name: cdf-api
+        image: __IMAGE__
+        resources:
+          cpu: 0.25
+          memory: 0.5Gi
+        env:
+          - name: ConnectionStrings__Default
+            secretRef: db-connection
+          - name: Jwt__SigningKey
+            secretRef: jwt-key
+          - name: Pin__Secret
+            secretRef: pin-secret
+          - name: AdminUser__Password
+            secretRef: admin-password
+          - name: Database__ApplyMigrationsOnStartup
+            value: "true"
+          - name: DemoData__SeedOnStartup
+            value: "false"
+          - name: DemoData__ResetOnStartup
+            value: "false"
+          - name: HttpsRedirection__Enabled
+            value: "false"
+          - name: Proxy__ForwardLimit
+            value: "2"
+          - name: RateLimit__LoginPorMinuto
+            value: "30"
+        probes:
+          # The API only listens after the migrations finish, so the first start can take a while: up to 5 minutes before it is restarted.
+          - type: Startup
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 60
+          # Alive = the process answers. It does not look at the database, so a database outage never restarts the API.
+          - type: Liveness
+            httpGet:
+              path: /health/live
+              port: 8080
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Ready = the database answers too: while it does not, the API gets no traffic.
+          - type: Readiness
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 3
+    scale:
+      minReplicas: 1
+      maxReplicas: 1

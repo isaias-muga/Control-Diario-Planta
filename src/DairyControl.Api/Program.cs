@@ -1,6 +1,7 @@
 using DairyControl.Api.Authorization;
 using DairyControl.Api.Health;
 using DairyControl.Api.Middleware;
+using DairyControl.Api.Startup;
 using DairyControl.Application;
 using DairyControl.Application.Seguridad;
 using DairyControl.Application.Services;
@@ -12,6 +13,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Stop at once, naming every missing or too-short setting, instead of failing on the first login (the host has no logger yet)
+ConfiguracionDeArranque.ExigirValida(builder.Configuration);
 
 // 1. Registering services — telling the DI container what exists
 builder.Services.AddControllers(options => ApiErrors.UseSpanishBindingMessages(options))
@@ -62,32 +66,41 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Every startup step that can fail logs a Critical line with its name before the exception goes on
 if (app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
 {
-    using var scope = app.Services.CreateScope();
-    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
+    await PasoDeArranque.EjecutarAsync(app.Logger, "aplicar las migraciones", () =>
+    {
+        using var scope = app.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
+        return Task.CompletedTask;
+    });
 }
 
-// The first admin comes from the deployment secret when there are no users yet (not forced to change it: the deployer chose it)
-if (!string.IsNullOrEmpty(app.Configuration["AdminUser:Password"]))
+// The first admin comes from the deployment secret when there are no users yet; unless AdminUser:ForzarCambioPassword is false
+// (compose, e2e, the demo) it must choose a password of its own at the first login
+await PasoDeArranque.EjecutarAsync(app.Logger, "crear el primer administrador", async () =>
 {
     using var scope = app.Services.CreateScope();
     if (await scope.ServiceProvider.GetRequiredService<UsuarioAppService>().AsegurarAdminInicialAsync())
     {
         scope.ServiceProvider.GetRequiredService<ILogger<UsuarioAppService>>().LogWarning("Primer administrador creado desde AdminUser:Password.");
     }
-}
+});
 
 var resetDemoData = app.Configuration.GetValue<bool>("DemoData:ResetOnStartup");
 var seedDemoData = app.Configuration.GetValue<bool>("DemoData:SeedOnStartup");
 if (resetDemoData || seedDemoData)
 {
-    using var scope = app.Services.CreateScope();
-    var seeder = new DemoDataSeeder(
-        scope.ServiceProvider.GetRequiredService<AppDbContext>(),
-        scope.ServiceProvider.GetRequiredService<TimeProvider>(),
-        scope.ServiceProvider.GetRequiredService<ILogger<DemoDataSeeder>>());
-    await seeder.InitializeAsync(resetDemoData, seedDemoData);
+    await PasoDeArranque.EjecutarAsync(app.Logger, "cargar o reiniciar los datos de demostración", async () =>
+    {
+        using var scope = app.Services.CreateScope();
+        var seeder = new DemoDataSeeder(
+            scope.ServiceProvider.GetRequiredService<AppDbContext>(),
+            scope.ServiceProvider.GetRequiredService<TimeProvider>(),
+            scope.ServiceProvider.GetRequiredService<ILogger<DemoDataSeeder>>());
+        await seeder.InitializeAsync(resetDemoData, seedDemoData);
+    });
 }
 
 // 2. The pipeline — what happens to every incoming request, in order
@@ -109,7 +122,8 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapDairyControlHealth();
 
-app.Run();
+// A failure while the host starts (for example the Pin:Secret validation) is logged Critical too, not only left to the crash output
+await PasoDeArranque.EjecutarAsync(app.Logger, "iniciar el servidor", () => app.RunAsync());
 
 // The authorization tests start the real application in memory
 public partial class Program;

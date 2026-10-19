@@ -28,6 +28,8 @@ services:
       ConnectionStrings__Default: Server=db;Database=DairyControl;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}
       AdminUser__Password: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      # The e2e tests and the local stack log in as the bootstrap admin with this password; production forces the change (the default)
+      AdminUser__ForzarCambioPassword: "false"
       Pin__Secret: ${PIN_SECRET:?Set PIN_SECRET in .env}
       # The e2e suite logs in many times a minute from one address; production keeps the default (30 per minute per address)
       RateLimit__LoginPorMinuto: "300"

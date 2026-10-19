@@ -106,7 +106,7 @@ At runtime only the client is public (nginx serves it and proxies `/api`); the A
 - **End-to-end in CI:** Playwright runs against the full Docker Compose stack (SQL Server included) and is a required check, together with `build-test` and `client`. A pull request is required to change `main`.
 - **Build:** warnings are errors and nullable is on everywhere, so an unsuppressed warning fails the build (NuGet vulnerability advisories are shown but do not fail it, a documented exception).
 - **`GET /health`:** 200 when the API and the database answer, 503 otherwise. CI waits on it.
-- **Deployment:** after CI passes on `main`, GitHub Actions builds both images, pushes them to GitHub Container Registry tagged with the commit and updates both Azure Container Apps. Azure login uses OIDC: no credentials are stored in the repo. Details, rollbacks and troubleshooting: [docs/deployment.md](docs/deployment.md).
+- **Deployment:** the demo is deployed from a separate, frozen repository (notes in [docs/deployment.md](docs/deployment.md)). The production instance for the plant (always on, private registry, backups) is created by a script and deployed by hand from the Actions tab, with OIDC and no stored credentials: [docs/production.md](docs/production.md). A merge to `main` deploys nothing.
 
 ## How it's built
 

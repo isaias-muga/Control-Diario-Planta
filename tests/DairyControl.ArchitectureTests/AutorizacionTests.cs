@@ -79,7 +79,7 @@ namespace DairyControl.ArchitectureTests
         }
 
         [Fact]
-        public void OnlyTheHealthEndpoint_IsMappedAnonymouslyInTheSource()
+        public void OnlyTheHealthEndpoints_AreMappedAnonymouslyInTheSource()
         {
             // Act: every .AllowAnonymous() call in the API sources (comments skipped)
             var llamadas = Proyecto.Fuentes("DairyControl.Api")
@@ -89,7 +89,8 @@ namespace DairyControl.ArchitectureTests
                 .ToList();
 
             // Assert
-            Assert.Equal(["HealthEndpoints.cs"], llamadas);
+            // /health and /health/live, both in the same file
+            Assert.Equal(["HealthEndpoints.cs", "HealthEndpoints.cs"], llamadas);
         }
     }
 }

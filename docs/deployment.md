@@ -1,5 +1,7 @@
 # Deployment
 
+> This document describes the **demo** environment. Its deploy workflow no longer lives in this repository (it is deployed from the frozen public repository). The production instance is described in [production.md](production.md).
+
 DairyControl runs on **Azure Container Apps** with an **Azure SQL Database** (serverless). Every merge to `main` is deployed automatically by GitHub Actions. This document describes how the environment was set up and how deployments work.
 
 ## Architecture
