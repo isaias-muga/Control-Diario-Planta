@@ -1,4 +1,4 @@
-# DairyControl
+# Control Diario Fábrica
 
 Milk reception and quality control for a dairy plant, built from the plant's real spreadsheets.
 
@@ -56,7 +56,7 @@ A _proveedor_ is a milk supplier; a _recepción_ is one delivery received at the
 - **Recepciones list.** Daily subtotals, filters by period, supplier, ticket and "out of range only".
 - **es-AR numbers and plant time.** `1.234,5` is read as 1234.5 (ambiguous input is rejected with a message). Dates are shown and validated in Buenos Aires time.
 - **One registration flow.** Load, confirm, done: big inputs, silo buttons, a confirmation that highlights values over the limits, and protection against double taps and lost connections. It is a centered card on a PC and a full screen on a phone; the office clerk and the reception phone use the same flow.
-- **Users and roles.** Admin, Oficina (reads everything and registers recepciones) and Recepcion (the reception phone: one button, and an operator PIN to say who loads each delivery). Permissions are enforced by the API; every delivery and supplier records who created it. Sessions end the moment a user is deactivated or changes the password.
+- **Users and roles.** Admin, Oficina (reads everything and registers recepciones), Consulta (the owner: reads everything, changes nothing) and Recepcion (the reception phone: one button, and an operator PIN to say who loads each delivery). Permissions are enforced by the API; every delivery and supplier records who created it. Sessions end the moment a user is deactivated or changes the password.
 - Deliveries are records of what happened: they can be registered, not edited or deleted.
 
 ## Architecture

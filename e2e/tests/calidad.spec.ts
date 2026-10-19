@@ -4,7 +4,7 @@ import {
   crearProveedor,
   guardarLimites,
   irAConfiguracion,
-  loginYEsperarResumen,
+  loginYEsperarInicio,
   registrarRecepcion,
   rellenar,
   restaurarAcidezMaxima,
@@ -20,7 +20,7 @@ async function fueraDeRangoEn(page: Page, nombre: string): Promise<string> {
 }
 
 test.beforeEach(async ({ page }) => {
-  await loginYEsperarResumen(page);
+  await loginYEsperarInicio(page);
 });
 
 test('calidad: a value outside the limits is saved and flagged as out of range', async ({ page }) => {

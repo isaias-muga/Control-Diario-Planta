@@ -27,6 +27,7 @@ describe('role guards', () => {
   it.each<[Rol, Rol[]]>([
     ['Admin', ['Admin', 'Oficina']],
     ['Oficina', ['Admin', 'Oficina']],
+    ['Consulta', ['Admin', 'Oficina', 'Consulta']],
     ['Recepcion', ['Recepcion']],
   ])('lets a %s in to a route for %j', (rol, permitidos) => {
     iniciarSesionDePrueba(rol);
@@ -40,16 +41,22 @@ describe('role guards', () => {
     expect(destino(ejecutar(roleGuard('Admin', 'Oficina')))).toBe('/inicio');
   });
 
-  it('sends the office to the dashboard when it opens an admin page', () => {
+  it('sends the office to Recepciones when it opens an admin page', () => {
     iniciarSesionDePrueba('Oficina');
 
-    expect(destino(ejecutar(roleGuard('Admin')))).toBe('/resumen');
+    expect(destino(ejecutar(roleGuard('Admin')))).toBe('/recepciones');
   });
 
-  it('sends the admin to the dashboard when it opens the reception home', () => {
+  it('sends Consulta to the dashboard when it opens the registration flow', () => {
+    iniciarSesionDePrueba('Consulta');
+
+    expect(destino(ejecutar(roleGuard('Admin', 'Oficina', 'Recepcion')))).toBe('/resumen');
+  });
+
+  it('sends the admin to Recepciones when it opens the reception home', () => {
     iniciarSesionDePrueba('Admin');
 
-    expect(destino(ejecutar(roleGuard('Recepcion')))).toBe('/resumen');
+    expect(destino(ejecutar(roleGuard('Recepcion')))).toBe('/recepciones');
   });
 
   it('sends a token with a role the client does not know to the login page instead of looping', () => {

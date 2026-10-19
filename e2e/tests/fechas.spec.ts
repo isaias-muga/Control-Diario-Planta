@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { abrirRegistro, crearProveedor, llenarRecepcion, loginYEsperarResumen, revisarDatos } from '../helpers';
+import { abrirRegistro, crearProveedor, llenarRecepcion, loginYEsperarInicio, revisarDatos } from '../helpers';
 
 const ZONA_PLANTA = 'America/Argentina/Buenos_Aires';
 
@@ -24,7 +24,7 @@ test.describe('fechas con el navegador en otra zona horaria', () => {
   test.use({ timezoneId: 'America/New_York' });
 
   test('la fecha y hora que se guarda (la de la confirmación) es la hora de la planta', async ({ page }) => {
-    await loginYEsperarResumen(page);
+    await loginYEsperarInicio(page);
     await crearProveedor(page);
     await abrirRegistro(page);
     await llenarRecepcion(page, { litros: 1000, acidez: 16, temperatura: 5 });
@@ -43,7 +43,7 @@ test.describe('fechas con el navegador en otra zona horaria', () => {
 
 test.describe('fechas', () => {
   test.beforeEach(async ({ page }) => {
-    await loginYEsperarResumen(page);
+    await loginYEsperarInicio(page);
   });
 
   test('la API responde 400 en español, sin "(Parameter", si falta la fecha o es inválida', async ({ page }) => {

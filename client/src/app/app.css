@@ -46,6 +46,15 @@
     order: 2;
   }
 
+  /* The full name is long: a smaller title keeps "Cerrar sesión" on the first row (the name ellipsizes before it wraps) */
+  .title {
+    font-size: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
   .nav {
     order: 3;
     display: flex;

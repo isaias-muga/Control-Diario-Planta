@@ -9,7 +9,7 @@ import {
   crearUsuarioPorApi,
   irAConfiguracion,
   loginComo,
-  loginYEsperarResumen,
+  loginYEsperarInicio,
   rellenar,
   ticketUnico,
 } from '../helpers';
@@ -123,7 +123,7 @@ test.describe('el celular de recepción (role Recepcion), at 390px', () => {
     await expect(page.getByRole('heading', { name: 'Recepción guardada' })).toBeVisible();
 
     const oficina = await browser.newPage();
-    await loginYEsperarResumen(oficina);
+    await loginYEsperarInicio(oficina);
     await oficina.goto('/recepciones');
     await expect(oficina.getByRole('cell', { name: String(ticket), exact: true })).toBeVisible();
     await oficina.close();
@@ -187,7 +187,7 @@ test.describe('Oficina (the office clerk)', () => {
   test('can register recepciones but sees no way to create proveedores or change settings, and no Usuarios page', async ({ page, request }) => {
     const persona = await crearUsuarioListoPorApi(request, 'Oficina');
     await loginComo(page, persona);
-    await expect(page.getByRole('heading', { name: 'Resumen de recepciones' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Recepciones', exact: true })).toBeVisible();
 
     await page.getByRole('link', { name: 'Proveedores', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Proveedores', exact: true })).toBeVisible();
@@ -207,7 +207,7 @@ test.describe('Oficina (the office clerk)', () => {
     await expect(page.getByRole('menuitem', { name: 'Usuarios' })).toHaveCount(0);
     await page.keyboard.press('Escape');
     await page.goto('/usuarios');
-    await expect(page).toHaveURL(/\/resumen$/);
+    await expect(page).toHaveURL(/\/recepciones$/);
   });
 
   test('the server still refuses every change but registering a recepción, whatever the page shows', async ({ request }) => {
@@ -224,6 +224,50 @@ test.describe('Oficina (the office clerk)', () => {
   });
 });
 
+test.describe('Consulta (the owner, read only)', () => {
+  test('lands on Resumen, reads everything and sees no way to create, edit or register', async ({ page, request }) => {
+    const persona = await crearUsuarioListoPorApi(request, 'Consulta');
+    await loginComo(page, persona);
+    await expect(page.getByRole('heading', { name: 'Resumen de recepciones' })).toBeVisible();
+
+    await page.getByRole('link', { name: 'Recepciones', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Recepciones', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: '+ Registrar recepción' })).toHaveCount(0);
+
+    await page.getByRole('link', { name: 'Proveedores', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Proveedores', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Nuevo proveedor' })).toHaveCount(0);
+
+    await irAConfiguracion(page);
+    await expect(page.getByLabel(/^Acidez máxima/)).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Guardar' })).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Ajustes' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Usuarios' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    // The registration flow and the admin pages send it back to its own start
+    await page.goto('/recepciones/carga');
+    await expect(page).toHaveURL(/\/resumen$/);
+    await page.goto('/usuarios');
+    await expect(page).toHaveURL(/\/resumen$/);
+  });
+
+  test('the server refuses every write with 403, whatever the page shows', async ({ request }) => {
+    const persona = await crearUsuarioListoPorApi(request, 'Consulta');
+    const login = await request.post('/api/Auth/login', { data: { username: persona.username, password: PASSWORD_PROPIA } });
+    const headers = { Authorization: `Bearer ${(await login.json()).token}` };
+
+    expect((await request.get('/api/Proveedores', { headers })).status()).toBe(200);
+    expect((await request.get('/api/Configuracion/calidad', { headers })).status()).toBe(200);
+    expect((await request.post('/api/Proveedores', { headers, data: { nombre: 'No' } })).status()).toBe(403);
+    expect((await request.post(`/api/Proveedores/${crypto.randomUUID()}/recepciones`, { headers, data: {} })).status()).toBe(403);
+    expect((await request.put('/api/Configuracion/calidad', { headers, data: { acidezMaxima: 19, temperaturaMaxima: 20, aguaMaxima: 0, version: 'x' } })).status()).toBe(403);
+    expect((await request.get('/api/Usuarios', { headers })).status()).toBe(403);
+    expect((await request.get('/api/Operarios', { headers })).status()).toBe(403);
+  });
+});
+
 test.describe('Oficina registers on a PC (1366px)', () => {
   test.use({ viewport: { width: 1366, height: 768 } });
 
@@ -232,7 +276,7 @@ test.describe('Oficina registers on a PC (1366px)', () => {
     const persona = await crearUsuarioListoPorApi(request, 'Oficina');
     const ticket = ticketUnico();
     await loginComo(page, persona);
-    await expect(page.getByRole('heading', { name: 'Resumen de recepciones' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Recepciones', exact: true })).toBeVisible();
 
     await page.getByRole('link', { name: 'Recepciones', exact: true }).click();
     await page.getByRole('link', { name: '+ Registrar recepción' }).click();
@@ -266,7 +310,7 @@ test.describe('Oficina registers on a PC (1366px)', () => {
 
 test.describe('Admin: users and operarios', () => {
   test('creates a user and an operario from the Usuarios page, and the new user must choose a password', async ({ page, browser }) => {
-    await loginYEsperarResumen(page);
+    await loginYEsperarInicio(page);
     await page.getByRole('button', { name: 'Ajustes' }).click();
     await page.getByRole('menuitem', { name: 'Usuarios' }).click();
     await expect(page.getByRole('heading', { name: 'Usuarios', exact: true })).toBeVisible();
@@ -278,7 +322,7 @@ test.describe('Admin: users and operarios', () => {
     await rellenar(dialogo.getByLabel('Usuario'), username);
     await rellenar(dialogo.getByLabel('Nombre'), `E2E Persona ${sufijo}`);
     await dialogo.getByRole('combobox', { name: 'Rol' }).click();
-    await page.getByRole('option', { name: 'Oficina (solo lectura)' }).click();
+    await page.getByRole('option', { name: 'Oficina', exact: true }).click();
     await rellenar(dialogo.getByLabel('Contraseña temporal'), PASSWORD_TEMPORAL);
     await dialogo.getByRole('button', { name: 'Crear' }).click();
     await expect(page.getByRole('cell', { name: username, exact: true })).toBeVisible();
@@ -300,7 +344,7 @@ test.describe('Admin: users and operarios', () => {
   test('deactivating a user ends its session at once', async ({ page, request }) => {
     const persona = await crearUsuarioListoPorApi(request, 'Oficina');
     await loginComo(page, persona);
-    await expect(page.getByRole('heading', { name: 'Resumen de recepciones' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Recepciones', exact: true })).toBeVisible();
     // The page is still loading its data: a request answered after the admin's change would end the session before the test acts
     await page.waitForLoadState('networkidle');
 
@@ -316,7 +360,7 @@ test.describe('Admin: users and operarios', () => {
   test('a password reset ends the sessions and the user must choose another password', async ({ page, request, browser }) => {
     const persona = await crearUsuarioListoPorApi(request, 'Oficina');
     await loginComo(page, persona);
-    await expect(page.getByRole('heading', { name: 'Resumen de recepciones' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Recepciones', exact: true })).toBeVisible();
     // The page is still loading its data: a request answered after the admin's change would end the session before the test acts
     await page.waitForLoadState('networkidle');
     const headers = await cabecerasAutenticadas(request);

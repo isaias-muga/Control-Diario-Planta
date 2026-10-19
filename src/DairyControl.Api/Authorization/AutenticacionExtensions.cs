@@ -65,22 +65,22 @@ namespace DairyControl.Api.Authorization
             }
         }
 
-        /// <summary>The policies: who may do what. The default and the fallback are "Admin or Oficina".</summary>
+        /// <summary>The policies: who may do what. The default and the fallback are "Admin, Oficina or Consulta" (read only).</summary>
         public static IServiceCollection AddDairyControlAuthorization(this IServiceCollection services)
         {
             services.AddSingleton<IAuthorizationHandler, PasswordVigenteHandler>();
             services.AddSingleton<IAuthorizationMiddlewareResultHandler, ResultadoAutorizacion>();
             services.AddAuthorizationBuilder()
-                .SetDefaultPolicy(Politica(RolUsuario.Admin, RolUsuario.Oficina))
-                .SetFallbackPolicy(Politica(RolUsuario.Admin, RolUsuario.Oficina))
-                .AddPolicy(Politicas.Lectura, Politica(RolUsuario.Admin, RolUsuario.Oficina))
-                .AddPolicy(Politicas.LecturaCarga, Politica(RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion))
+                .SetDefaultPolicy(Politica(RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Consulta))
+                .SetFallbackPolicy(Politica(RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Consulta))
+                .AddPolicy(Politicas.Lectura, Politica(RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Consulta))
+                .AddPolicy(Politicas.LecturaCarga, Politica(RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion, RolUsuario.Consulta))
                 .AddPolicy(Politicas.Registro, Politica(RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion))
                 .AddPolicy(Politicas.Administracion, Politica(RolUsuario.Admin))
-                .AddPolicy(Politicas.Autenticado, Politica(RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion))
+                .AddPolicy(Politicas.Autenticado, Politica(RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion, RolUsuario.Consulta))
                 .AddPolicy(Politicas.CambioPassword, new AuthorizationPolicyBuilder()
                     .RequireAuthenticatedUser()
-                    .RequireRole(nameof(RolUsuario.Admin), nameof(RolUsuario.Oficina), nameof(RolUsuario.Recepcion))
+                    .RequireRole(nameof(RolUsuario.Admin), nameof(RolUsuario.Oficina), nameof(RolUsuario.Recepcion), nameof(RolUsuario.Consulta))
                     .Build());
             return services;
         }

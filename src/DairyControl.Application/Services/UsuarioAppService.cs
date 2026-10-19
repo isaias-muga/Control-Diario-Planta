@@ -32,7 +32,9 @@ namespace DairyControl.Application.Services
 
         public async Task<UsuarioDto> CrearAsync(CrearUsuarioDto dto)
         {
-            if (!Enum.TryParse<RolUsuario>(dto.Rol, ignoreCase: true, out var rol) || !Enum.IsDefined(rol))
+            // By name only: Enum.TryParse would also take "3" and map it to a role by its number
+            if (!Enum.GetNames<RolUsuario>().Contains(dto.Rol, StringComparer.OrdinalIgnoreCase)
+                || !Enum.TryParse<RolUsuario>(dto.Rol, ignoreCase: true, out var rol))
             {
                 throw new ReglaDeNegocioException("El rol no es válido.", "rol");
             }

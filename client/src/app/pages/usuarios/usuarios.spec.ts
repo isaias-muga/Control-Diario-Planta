@@ -65,7 +65,7 @@ describe('Usuarios', () => {
   it('lists the users with their role and state, and the operarios', () => {
     expect(filas(0)).toHaveLength(3);
     expect(filas(0)[1]).toContain('maria');
-    expect(filas(0)[1]).toContain('Oficina (solo lectura)');
+    expect(filas(0)[1]).toContain('Oficina');
     expect(filas(0)[1]).toContain('Contraseña pendiente');
     expect(filas(0)[2]).toContain('Desactivado');
     expect(filas(1)).toEqual([expect.stringContaining('Juan Pérez')]);

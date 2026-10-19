@@ -3,7 +3,7 @@ import {
   confirmarRecepcion,
   crearProveedor,
   llenarRecepcion,
-  loginYEsperarResumen,
+  loginYEsperarInicio,
   registrarRecepcion,
   rellenar,
   revisarDatos,
@@ -36,7 +36,7 @@ async function elegirProveedor(page: Page, nombre: string): Promise<void> {
 }
 
 test.beforeEach(async ({ page }) => {
-  await loginYEsperarResumen(page);
+  await loginYEsperarInicio(page);
 });
 
 test('recepciones: the list shows a recepción registered from the page, with the proveedor chosen in the flow', async ({ page }) => {

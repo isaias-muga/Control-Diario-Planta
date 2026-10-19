@@ -25,15 +25,15 @@ namespace DairyControl.Api.Tests
         // The reply of an allowed call may be anything but 401/403 (the data behind it is mocked): only authorization is under test.
         private static readonly (string Metodo, string Ruta, RolUsuario[] Roles)[] Filas =
         [
-            ("GET", "/api/Proveedores", [RolUsuario.Admin, RolUsuario.Oficina]),
-            ("GET", "/api/Proveedores/opciones", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
-            ("GET", $"/api/Proveedores/{UnId}", [RolUsuario.Admin, RolUsuario.Oficina]),
+            ("GET", "/api/Proveedores", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Consulta]),
+            ("GET", "/api/Proveedores/opciones", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion, RolUsuario.Consulta]),
+            ("GET", $"/api/Proveedores/{UnId}", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Consulta]),
             ("POST", "/api/Proveedores", [RolUsuario.Admin]),
             ("POST", $"/api/Proveedores/{UnId}/recepciones", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
-            ("GET", "/api/Recepciones?desde=2026-10-01&hasta=2026-10-02", [RolUsuario.Admin, RolUsuario.Oficina]),
-            ("GET", "/api/Recepciones/resumen?desde=2026-10-01&hasta=2026-10-02", [RolUsuario.Admin, RolUsuario.Oficina]),
-            ("GET", "/api/Recepciones/siguiente-ticket", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
-            ("GET", "/api/Configuracion/calidad", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
+            ("GET", "/api/Recepciones?desde=2026-10-01&hasta=2026-10-02", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Consulta]),
+            ("GET", "/api/Recepciones/resumen?desde=2026-10-01&hasta=2026-10-02", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Consulta]),
+            ("GET", "/api/Recepciones/siguiente-ticket", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion, RolUsuario.Consulta]),
+            ("GET", "/api/Configuracion/calidad", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion, RolUsuario.Consulta]),
             ("PUT", "/api/Configuracion/calidad", [RolUsuario.Admin]),
             ("GET", "/api/Usuarios", [RolUsuario.Admin]),
             ("POST", "/api/Usuarios", [RolUsuario.Admin]),
@@ -43,8 +43,8 @@ namespace DairyControl.Api.Tests
             ("POST", "/api/Operarios", [RolUsuario.Admin]),
             ("POST", $"/api/Operarios/{UnId}/desactivar", [RolUsuario.Admin]),
             ("PUT", $"/api/Operarios/{UnId}/pin", [RolUsuario.Admin]),
-            ("POST", "/api/Auth/renovar", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
-            ("POST", "/api/Auth/cambiar-password", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
+            ("POST", "/api/Auth/renovar", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion, RolUsuario.Consulta]),
+            ("POST", "/api/Auth/cambiar-password", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion, RolUsuario.Consulta]),
         ];
 
 

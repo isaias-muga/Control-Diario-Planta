@@ -102,6 +102,21 @@ describe('Recepciones page', () => {
     expect(botones[0].getAttribute('href')).toBe('/recepciones/carga');
   });
 
+  it('offers Consulta no way to register a recepción (read only)', async () => {
+    TestBed.resetTestingModule();
+    cerrarSesionDePrueba();
+    iniciarSesionDePrueba('Consulta');
+    TestBed.configureTestingModule({
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: LOCALE_ID, useValue: 'es-AR' }],
+    });
+    http = TestBed.inject(HttpTestingController);
+
+    await abrir();
+
+    expect(el().querySelectorAll('.encabezado button, .encabezado a')).toHaveLength(0);
+    expect(el().textContent).not.toContain('Registrar recepción');
+  });
+
   it('has no registration dialog and no "Carga rápida" duplicate', async () => {
     await abrir();
 

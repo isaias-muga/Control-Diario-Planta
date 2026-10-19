@@ -62,8 +62,9 @@ describe('AuthService', () => {
   });
 
   it.each<[Rol, string]>([
-    ['Admin', '/resumen'],
-    ['Oficina', '/resumen'],
+    ['Admin', '/recepciones'],
+    ['Oficina', '/recepciones'],
+    ['Consulta', '/resumen'],
     ['Recepcion', '/inicio'],
   ])('a %s starts at %s', (rol, inicio) => {
     const service = crear(rol);
@@ -78,6 +79,7 @@ describe('AuthService', () => {
   it.each<[Rol, boolean]>([
     ['Admin', true],
     ['Oficina', true],
+    ['Consulta', false],
     ['Recepcion', false],
   ])('a %s can register recepciones from the screens: %s', (rol, puede) => {
     const service = crear(rol);
@@ -123,7 +125,7 @@ describe('AuthService', () => {
 
     expect(service.getToken()).toBe(nuevo);
     expect(service.debeCambiarPassword()).toBe(false);
-    expect(service.inicio()).toBe('/resumen');
+    expect(service.inicio()).toBe('/recepciones');
   });
 
   it('a 403 that says the password must be changed sends the user to the change page', () => {

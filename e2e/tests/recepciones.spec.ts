@@ -4,7 +4,7 @@ import {
   confirmarRecepcion,
   crearProveedor,
   llenarRecepcion,
-  loginYEsperarResumen,
+  loginYEsperarInicio,
   registrarRecepcion,
   rellenar,
   revisarDatos,
@@ -12,7 +12,7 @@ import {
 } from '../helpers';
 
 test.beforeEach(async ({ page }) => {
-  await loginYEsperarResumen(page);
+  await loginYEsperarInicio(page);
 });
 
 test('recepción: a valid one is saved and listed with its ticket', async ({ page }) => {
