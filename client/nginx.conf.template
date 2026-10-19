@@ -22,6 +22,12 @@ server {
         proxy_ssl_server_name on;
     }
 
+    # This nginx does not know the .webmanifest extension: without this it would be served as application/octet-stream
+    location = /manifest.webmanifest {
+        default_type application/manifest+json;
+        add_header Cache-Control "no-cache";
+    }
+
     # SPA fallback
     location / {
         # Revalidate on every load so a new deploy is picked up (bundles are hashed).
