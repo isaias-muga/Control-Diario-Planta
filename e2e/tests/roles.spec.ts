@@ -322,7 +322,7 @@ test.describe('Admin: users and operarios', () => {
     await rellenar(dialogo.getByLabel('Usuario'), username);
     await rellenar(dialogo.getByLabel('Nombre'), `E2E Persona ${sufijo}`);
     await dialogo.getByRole('combobox', { name: 'Rol' }).click();
-    await page.getByRole('option', { name: 'Oficina (solo lectura)' }).click();
+    await page.getByRole('option', { name: 'Oficina', exact: true }).click();
     await rellenar(dialogo.getByLabel('Contraseña temporal'), PASSWORD_TEMPORAL);
     await dialogo.getByRole('button', { name: 'Crear' }).click();
     await expect(page.getByRole('cell', { name: username, exact: true })).toBeVisible();
