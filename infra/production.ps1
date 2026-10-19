@@ -205,6 +205,29 @@ function Confirm-DeleteLock([string]$ResourceId, [string]$LockName, [string]$Not
     finally { Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue }
 }
 
+# The budget is a nice-to-have: if Azure refuses it (Cost Management can take up to 48 hours to work on a subscription that was just
+# upgraded to pay-as-you-go), the script warns, tells how to create it by hand, and goes on.
+function Write-BudgetWarning([string]$Reason) {
+    $detail = ((@($Reason -split "`r?`n") | Select-Object -Skip 1) -join ' ').Trim()
+    if ($detail.Length -gt 400) { $detail = $detail.Substring(0, 400) + '...' }
+    $lines = @(
+        '',
+        'WARNING: the budget alert was NOT created. Everything else was done, and the deploy does not depend on it.',
+        "Azure answered: $detail",
+        "Most likely reason: right after an upgrade to pay-as-you-go, Cost Management can take up to 48 hours to become available on the",
+        "subscription, and until then even an Owner is refused (RBACAccessDenied / Unauthorized). Logging out and in again does not change that.",
+        'To get the alert: run this script again later (it is safe to repeat; it will only create the budget), or create it by hand now:',
+        "  1. Azure portal > Resource groups > $ResourceGroup > Cost Management > Budgets > Add.",
+        "  2. Name: $BudgetName. Reset period: Monthly. Creation date: the 1st of this month. Expiration: about 5 years from now.",
+        "  3. Amount: $BudgetAmountUsd (USD).",
+        "  4. Alert conditions, three of them: Actual, 80 % of budget; Actual, 100 %; Forecasted, 100 %.",
+        "     Alert recipients (e-mail): $budgetEmail",
+        '  5. Create.',
+        ''
+    )
+    foreach ($line in $lines) { Write-Host $line -ForegroundColor Yellow }
+}
+
 function Confirm-Role([string]$PrincipalId, [string]$Role, [string]$Scope) {
     $count = Get-AzValue @('role', 'assignment', 'list', '--assignee', $PrincipalId, '--role', $Role, '--scope', $Scope, '--query', 'length(@)', '--output', 'tsv')
     if ($count -and [int]$count -gt 0) { Write-Info "Role $Role already assigned on $Scope."; return }
@@ -521,11 +544,21 @@ Confirm-DeleteLock -ResourceId $SqlServerId -LockName 'lock-sql-server' -Notes '
 Confirm-DeleteLock -ResourceId $DatabaseId -LockName 'lock-sql-db' -Notes 'Production database: do not delete.'
 
 # ---------------------------------------------------------------------------------------------------------------------------------
+# GitHub: what the deploy workflow reads (identifiers, not secrets of value; stored as repository secrets as agreed)
+# ---------------------------------------------------------------------------------------------------------------------------------
+Write-Step "GitHub repository secrets and variable on $GitHubRepo"
+Invoke-Gh -CliArgs @('secret', 'set', 'AZURE_CLIENT_ID', '--repo', $GitHubRepo, '--body', $deployAppId) | Out-Null
+Invoke-Gh -CliArgs @('secret', 'set', 'AZURE_TENANT_ID', '--repo', $GitHubRepo, '--body', $tenantId) | Out-Null
+Invoke-Gh -CliArgs @('secret', 'set', 'AZURE_SUBSCRIPTION_ID', '--repo', $GitHubRepo, '--body', $subscriptionId) | Out-Null
+Invoke-Gh -CliArgs @('variable', 'set', 'ACR_NAME', '--repo', $GitHubRepo, '--body', $AcrName) | Out-Null
+
+# ---------------------------------------------------------------------------------------------------------------------------------
 # Budget alert
 # ---------------------------------------------------------------------------------------------------------------------------------
 Write-Step "Budget alert of USD $BudgetAmountUsd a month"
+$budgetCreated = $false
 $budgetUrl = "https://management.azure.com$GroupScope/providers/Microsoft.Consumption/budgets/$BudgetName`?api-version=2023-05-01"
-if ((Invoke-Az -CliArgs @('rest', '--method', 'get', '--url', $budgetUrl, '--output', 'none') -ReadOnly -AllowFail).ExitCode -eq 0) { Write-Info 'Budget already exists.' }
+if ((Invoke-Az -CliArgs @('rest', '--method', 'get', '--url', $budgetUrl, '--output', 'none') -ReadOnly -AllowFail).ExitCode -eq 0) { Write-Info 'Budget already exists.'; $budgetCreated = $true }
 else {
     $notification = { param($threshold, $type) @{ enabled = $true; operator = 'GreaterThan'; threshold = $threshold; thresholdType = $type; contactEmails = @($budgetEmail) } }
     $budgetBody = @{
@@ -542,18 +575,13 @@ else {
         }
     }
     $budgetFile = Write-TempJson $budgetBody
-    try { Invoke-Az -CliArgs @('rest', '--method', 'put', '--url', $budgetUrl, '--body', "@$budgetFile", '--output', 'none') | Out-Null }
+    try {
+        Invoke-Az -CliArgs @('rest', '--method', 'put', '--url', $budgetUrl, '--body', "@$budgetFile", '--output', 'none') | Out-Null
+        $budgetCreated = $true
+    }
+    catch { Write-BudgetWarning $_.Exception.Message }
     finally { Remove-Item -LiteralPath $budgetFile -Force -ErrorAction SilentlyContinue }
 }
-
-# ---------------------------------------------------------------------------------------------------------------------------------
-# GitHub: what the deploy workflow reads (identifiers, not secrets of value; stored as repository secrets as agreed)
-# ---------------------------------------------------------------------------------------------------------------------------------
-Write-Step "GitHub repository secrets and variable on $GitHubRepo"
-Invoke-Gh -CliArgs @('secret', 'set', 'AZURE_CLIENT_ID', '--repo', $GitHubRepo, '--body', $deployAppId) | Out-Null
-Invoke-Gh -CliArgs @('secret', 'set', 'AZURE_TENANT_ID', '--repo', $GitHubRepo, '--body', $tenantId) | Out-Null
-Invoke-Gh -CliArgs @('secret', 'set', 'AZURE_SUBSCRIPTION_ID', '--repo', $GitHubRepo, '--body', $subscriptionId) | Out-Null
-Invoke-Gh -CliArgs @('variable', 'set', 'ACR_NAME', '--repo', $GitHubRepo, '--body', $AcrName) | Out-Null
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 # Done
@@ -565,6 +593,8 @@ Write-Info "Production address : https://$clientFqdn"
 Write-Info "Resource group     : $ResourceGroup"
 Write-Info "Registry           : $AcrServer"
 Write-Info "SQL server         : $sqlFqdn (database $DatabaseName)"
+if ($budgetCreated) { Write-Info "Budget             : $BudgetName (USD $BudgetAmountUsd a month)" }
+else { Write-Host '   Budget             : NOT created (see the yellow warning above); run this script again later or create it by hand' -ForegroundColor Yellow }
 Write-Host ''
 Write-Host 'Next: check each resource in the Azure portal (docs/production.md, "What to check afterwards"), then run the workflow' -ForegroundColor Green
 Write-Host '"Deploy production" from the Actions tab of the repository. Until it runs, the address shows a placeholder page, not the app.' -ForegroundColor Green

@@ -74,8 +74,17 @@ Open <https://portal.azure.com> and the resource group `rg-control-diario-prod`.
 7. **Container app `cdf-api`** → *Ingress*: **Limited to Container Apps Environment** (internal), so it has no public address; *Scale*: min 1, max 1; *Secrets*: `db-connection`, `jwt-key`, `pin-secret`, `admin-password` (values hidden); *Identity*: user assigned `id-cdf-pull`.
 8. **Container app `cdf-client`** → *Ingress*: **Accepting traffic from anywhere**, *Insecure connections*: **not allowed**; *Scale*: min 1, max 1.
 9. **App registration `github-cdf-prod-deploy`** (Microsoft Entra ID → App registrations) → *Certificates & secrets*: **no client secrets** and one federated credential `github-main` whose subject starts with `repo:<owner>@<id>/...@<id>:ref:refs/heads/main`; and on the resource group, container apps and registry, *Access control (IAM)* → *Role assignments* shows only: Reader (group), Contributor (each of the two apps), AcrPush (registry).
-10. **Cost Management** → *Budgets*: `bud-cdf-prod`, USD 25 a month, with the three alerts to your e-mail.
+10. **Cost Management** → *Budgets*: `bud-cdf-prod`, USD 25 a month, with the three alerts to your e-mail. If the script ended with a yellow warning about the budget, it is not there yet: see "If the script stops".
 11. **GitHub** → the repository → *Settings* → *Secrets and variables* → *Actions*: secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`; variable `ACR_NAME`.
+
+## If the script stops
+
+The script is safe to run again after any failure: each step checks what already exists and only does what is missing. Read the message, fix the cause, run it again.
+
+| What you see | What it means | What to do |
+| --- | --- | --- |
+| A yellow **WARNING: the budget alert was NOT created**, with `Unauthorized` / `RBACAccessDenied` in "Azure answered", and at the end `Budget : NOT created` | Azure refused the budget. Right after a subscription is upgraded to pay-as-you-go, **Cost Management can take up to 48 hours** to start working on it, and until then even an Owner is refused. Logging out and in (what Azure's message suggests) does not help. The rest of the setup was finished: the GitHub secrets and the `ACR_NAME` variable are set **before** the budget step, so you can already run *Deploy production*. | Either run the script again a day or two later (it will only create the budget), or create it by hand now: Azure portal → *Resource groups* → `rg-control-diario-prod` → *Cost Management* → *Budgets* → *Add*; name `bud-cdf-prod`, reset period *Monthly*, creation date the 1st of this month, expiration about 5 years ahead, amount **25 USD**; alerts: *Actual* 80 %, *Actual* 100 %, *Forecasted* 100 %, recipient your e-mail; *Create*. If the portal's *Budgets* page itself says the service is not available yet, wait and try again. |
+| An authorization error in *Deploy the API* of the workflow | See "If the deploy is refused" below. | Run the script with `-DeployRoleScope ResourceGroup`. |
 
 ## Deploy and rollback
 

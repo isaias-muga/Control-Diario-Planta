@@ -81,7 +81,7 @@ Assert-That ((Get-Content -Raw $scriptPath) -notmatch "@\('lock'|'lock',\s*'(sho
 Write-Host '== -DryRun against the fake az and gh'
 $mutating = '^(az (extension add|provider register|group create|acr create|monitor log-analytics workspace (create|update)|identity create|role assignment (create|delete)|containerapp (env )?create|sql (server|db)( str-policy| firewall-rule)? (create|update|set)|ad (app|sp) create|ad app federated-credential (create|update)|lock create|rest --method put)|gh (secret|variable) set)'
 
-function Invoke-Script([string]$State, [string]$Offer = '', [switch]$Real, [string]$Locks = '') {
+function Invoke-Script([string]$State, [string]$Offer = '', [switch]$Real, [string]$Locks = '', [switch]$BudgetDenied) {
     $log = Join-Path ([System.IO.Path]::GetTempPath()) ("cdf-fake-" + [guid]::NewGuid().ToString('N') + '.log')
     $oldPath = $env:PATH
     $oldPreference = $ErrorActionPreference
@@ -92,6 +92,7 @@ function Invoke-Script([string]$State, [string]$Offer = '', [switch]$Real, [stri
         $env:CDF_FAKE_LOG = $log
         $env:CDF_FAKE_OFFER = $Offer
         $env:CDF_FAKE_LOCKS = $Locks
+        $env:CDF_FAKE_BUDGET = $(if ($BudgetDenied) { 'denied' } else { '' })
         if ($Real) {
             # Not a dry run: the commands that change things succeed in the fake and are logged; "SI" answers the confirmation
             $env:CDF_FAKE_ALLOW_MUTATION = '1'
@@ -105,11 +106,16 @@ function Invoke-Script([string]$State, [string]$Offer = '', [switch]$Real, [stri
     finally {
         $ErrorActionPreference = $oldPreference
         $env:PATH = $oldPath
-        Remove-Item Env:CDF_FAKE_STATE, Env:CDF_FAKE_LOG, Env:CDF_FAKE_OFFER, Env:CDF_FAKE_ALLOW_MUTATION, Env:CDF_FAKE_LOCKS -ErrorAction SilentlyContinue
+        Remove-Item Env:CDF_FAKE_STATE, Env:CDF_FAKE_LOG, Env:CDF_FAKE_OFFER, Env:CDF_FAKE_ALLOW_MUTATION, Env:CDF_FAKE_LOCKS, Env:CDF_FAKE_BUDGET -ErrorAction SilentlyContinue
     }
     $calls = @()
     if (Test-Path $log) { $calls = @(Get-Content $log); Remove-Item $log -Force }
     return @{ Code = $code; Text = ($output -join "`n"); Calls = $calls }
+}
+
+function Find-CallIndex($Calls, [string]$Pattern) {
+    for ($i = 0; $i -lt $Calls.Count; $i++) { if ($Calls[$i] -match $Pattern) { return $i } }
+    return -1
 }
 
 function Assert-SafeDryRun($Run, [string]$Name) {
@@ -172,6 +178,10 @@ Assert-That (@($real.Calls | Where-Object { $_ -like 'MUTATION gh secret set AZU
 Assert-That (@($real.Calls | Where-Object { $_ -like 'MUTATION gh variable set ACR_NAME*' }).Count -eq 1) 'real run: ACR_NAME is set'
 Assert-That (@($real.Calls | Where-Object { $_ -match 'containerapp create|admin-password|--admin-password' }).Count -eq 0) 'real run: no app is created and no password or secret is sent (cdf-api exists)'
 Assert-That ($real.Text -notmatch 'Bootstrap admin password') 'real run: the admin password is not asked for again'
+$firstSecret = Find-CallIndex $real.Calls '^MUTATION gh secret set'
+$budgetCall = Find-CallIndex $real.Calls '^BUDGET '
+Assert-That ($firstSecret -ge 0 -and $budgetCall -ge 0 -and $firstSecret -lt $budgetCall) 'real run: the GitHub secrets and variable are set BEFORE the budget'
+Assert-That ($real.Text -match 'Budget\s+: bud-cdf-prod \(USD 25 a month\)') 'real run: the summary says the budget was created'
 $leftovers = @(Get-ChildItem ([System.IO.Path]::GetTempPath()) -Filter 'cdf-*.json' -ErrorAction SilentlyContinue)
 Assert-That ($leftovers.Count -eq 0) 'real run: the temporary JSON files are deleted'
 
@@ -185,6 +195,23 @@ Assert-That ($realHalf.Text -match 'Lock lock-sql-server already exists') 'serve
 $realBoth = Invoke-Script 'credential' -Real -Locks 'lock-sql-server,lock-sql-db'
 Assert-That ($realBoth.Code -eq 0) "both locks already there, real run: exit code 0 (got $($realBoth.Code))"
 Assert-That (@($realBoth.Calls | Where-Object { $_ -like 'LOCK id=*' }).Count -eq 0) 'both locks already there: no lock is created again'
+
+# Cost Management not ready (the owner's case right after the upgrade): the budget is refused, everything else must still finish
+$refused = Invoke-Script 'credential' -Real -Locks 'lock-sql-server,lock-sql-db' -BudgetDenied
+Assert-That ($refused.Code -eq 0) "budget refused: the script still ends with exit code 0 (got $($refused.Code))"
+Assert-That (@($refused.Calls | Where-Object { $_ -like 'DENIED budget' }).Count -eq 1) 'budget refused: Azure was asked once and said no'
+Assert-That (@($refused.Calls | Where-Object { $_ -like 'MUTATION gh secret set AZURE_*' }).Count -eq 3) 'budget refused: the three AZURE_* secrets are still set'
+Assert-That (@($refused.Calls | Where-Object { $_ -like 'MUTATION gh variable set ACR_NAME*' }).Count -eq 1) 'budget refused: ACR_NAME is still set'
+Assert-That ((Find-CallIndex $refused.Calls '^MUTATION gh variable set') -lt (Find-CallIndex $refused.Calls '^DENIED budget')) 'budget refused: the GitHub step had already run when the budget was refused'
+Assert-That ($refused.Text -match 'the budget alert was NOT created') 'budget refused: a warning says the budget was not created'
+Assert-That ($refused.Text -match 'RBACAccessDenied') 'budget refused: it shows what Azure answered'
+Assert-That ($refused.Text -match 'Cost Management can take up to 48 hours') 'budget refused: it explains that Cost Management can take up to 48 hours after an upgrade'
+Assert-That ($refused.Text -match 'run this script again later') 'budget refused: it says that running the script again later creates the budget'
+Assert-That (($refused.Text -match 'Resource groups > rg-control-diario-prod > Cost Management > Budgets') -and ($refused.Text -match 'Amount: 25 \(USD\)') -and ($refused.Text -match 'Monthly')) 'budget refused: the portal steps name the scope, the amount and the period'
+Assert-That (($refused.Text -match 'Actual, 80 %') -and ($refused.Text -match 'Actual, 100 %') -and ($refused.Text -match 'Forecasted, 100 %') -and ($refused.Text -match 'Alert recipients \(e-mail\): owner@example\.com')) 'budget refused: the portal steps list the three alerts and the e-mail'
+Assert-That ($refused.Text -match '== Done') 'budget refused: it goes on to Done'
+Assert-That ($refused.Text -match 'Budget\s+: NOT created') 'budget refused: the summary says the budget was not created'
+Assert-That (@(Get-ChildItem ([System.IO.Path]::GetTempPath()) -Filter 'cdf-*.json' -ErrorAction SilentlyContinue).Count -eq 0) 'budget refused: the temporary JSON file is deleted'
 
 $realStale = Invoke-Script 'stalecredential' -Real
 Assert-That ($realStale.Code -eq 0) "stale credential, real run: exit code 0 (got $($realStale.Code))"

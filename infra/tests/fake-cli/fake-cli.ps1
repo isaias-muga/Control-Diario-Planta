@@ -8,6 +8,8 @@
 # $env:CDF_FAKE_ALLOW_MUTATION=1 lets commands that change things succeed (and logs them), for a run of the script that is not a dry run;
 # the files passed as @file (federated credential, budget) are read and their content is logged.
 # $env:CDF_FAKE_LOCKS is a comma list of the delete locks that already exist (lock-sql-server, lock-sql-db); default none.
+# $env:CDF_FAKE_BUDGET=denied makes every call on the budget answer what Azure answers on a subscription whose Cost Management is not
+# ready yet (RBACAccessDenied), as the owner got right after upgrading to pay-as-you-go.
 # $env:CDF_FAKE_OFFER overrides the subscription offer (default PayAsYouGo_2014-09-01). Every call is appended to $env:CDF_FAKE_LOG.
 # Anything it does not know is logged as UNHANDLED and fails, so a new read-only call in the script cannot go unnoticed.
 [CmdletBinding(PositionalBinding = $false)]
@@ -33,6 +35,11 @@ function Reply([string]$Text, [int]$Code = 0) {
     if ($Text) { [Console]::Out.WriteLine($Text) }
     exit $Code
 }
+function BudgetDenied {
+    [Console]::Error.WriteLine('ERROR: Unauthorized({"error":{"code":"RBACAccessDenied","message":"The client does not have authorization to perform action."}})')
+    [Console]::Error.WriteLine('Interactive authentication is needed. Please run: az logout / az login')
+    exit 1
+}
 function NotFound { [Console]::Error.WriteLine('ERROR: (ResourceNotFound) The resource was not found.'); exit 3 }
 function Exists([bool]$Yes, [string]$Text = '') { if ($Yes) { Reply $Text } else { NotFound } }
 
@@ -55,7 +62,7 @@ elseif ($tool -eq 'az') {
             [Console]::Error.WriteLine('fake-cli: lock called with an unexpected resource id or arguments: ' + $command)
             exit 2
         }
-        '^rest --method get --url .*budgets' { NotFound }
+        '^rest --method get --url .*budgets' { if ($env:CDF_FAKE_BUDGET -eq 'denied') { BudgetDenied } NotFound }
         '^provider show' { Reply 'Registered' }
         '^group show' { Exists $built 'brazilsouth' }
         '^acr check-name' { Reply 'true' }
@@ -96,6 +103,10 @@ elseif ($tool -eq 'az') {
 
 $changes = '^(az (extension add|provider register|group create|acr create|monitor log-analytics workspace (create|update)|identity create|role assignment (create|delete)|containerapp (env )?create|sql (server|db)( str-policy| firewall-rule)? (create|update|set)|ad (app|sp) create|ad app federated-credential (create|update)|lock create|rest --method put)|gh (secret|variable) set)'
 if ($env:CDF_FAKE_ALLOW_MUTATION -eq '1' -and "$tool $command" -match $changes) {
+    if ($env:CDF_FAKE_BUDGET -eq 'denied' -and $command -match '^rest --method put .*budgets/') {
+        Add-Content -LiteralPath $env:CDF_FAKE_LOG -Value 'DENIED budget'
+        BudgetDenied
+    }
     if ($command -match '--(parameters|body) @(\S+)') {
         $file = $Matches[2]
         $json = Get-Content -Raw -LiteralPath $file | ConvertFrom-Json
