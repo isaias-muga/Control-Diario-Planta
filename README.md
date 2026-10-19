@@ -1,4 +1,4 @@
-# DairyControl
+# Control Diario Fábrica
 
 Milk reception and quality control for a dairy plant, built from the plant's real spreadsheets.
 

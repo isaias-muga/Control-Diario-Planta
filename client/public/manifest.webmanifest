@@ -1,0 +1,11 @@
+{
+  "name": "Control Diario Fábrica",
+  "short_name": "Control Diario",
+  "description": "Recepción y control de calidad de leche.",
+  "lang": "es",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#005cbb"
+}

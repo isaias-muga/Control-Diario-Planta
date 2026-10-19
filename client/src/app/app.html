@@ -1,7 +1,7 @@
 <!-- The reception phone has no toolbar: its home is one button -->
 @if (!auth.esRecepcion()) {
   <mat-toolbar class="toolbar">
-    <a class="title" [routerLink]="auth.inicio()">DairyControl</a>
+    <a class="title" [routerLink]="auth.inicio()">Control Diario Fábrica</a>
     <span class="spacer"></span>
     @if (auth.isLoggedIn()) {
       @if (!auth.debeCambiarPassword()) {

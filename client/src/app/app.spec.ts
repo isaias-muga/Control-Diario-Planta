@@ -34,10 +34,10 @@ describe('App', () => {
   it('should render title', async () => {
     const el = await abrir(null);
 
-    expect(el.querySelector('mat-toolbar')?.textContent).toContain('DairyControl');
+    expect(el.querySelector('mat-toolbar')?.textContent).toContain('Control Diario Fábrica');
   });
 
-  it.each<Rol>(['Admin', 'Oficina'])('shows the three section tabs, the settings button and logout to %s', async (rol) => {
+  it.each<Rol>(['Admin', 'Oficina', 'Consulta'])('shows the three section tabs, the settings button and logout to %s', async (rol) => {
     const el = await abrir(rol);
 
     const enlaces = Array.from(el.querySelectorAll('nav a')).map((a) => a.textContent?.trim());
