@@ -36,6 +36,7 @@ The API has **no public address**: only the client is reachable from the interne
 ### Credentials: nothing stored
 
 - **GitHub Actions to Azure:** OIDC. The app registration has a federated credential for this private repository, `main` branch, using the **immutable-ID subject** (`repo:<owner>@<owner id>/<repo>@<repo id>:ref:refs/heads/main`; the script reads both ids with `gh api`; this is what avoids the `AADSTS700213` error, see [deployment.md](deployment.md)). Its roles are the narrowest that work: **Contributor on the two container apps**, **AcrPush on the registry** and **Reader on the resource group**. It cannot remove the locks, so it cannot delete the production database.
+- **Accepted risk:** Contributor on a container app can read that app's secrets (`az containerapp secret list --show-values`), and the credential accepts any run of the workflows on `main`. So whoever can merge to `main` can, through a workflow, reach the production secrets. Keep `main` protected (pull request and the required checks) and keep the number of people with write access small; a GitHub *Environment* with required reviewers on the deploy job is the next step if that is not enough.
 - **Images:** Actions pushes to the registry with that same identity (no ghcr, no token); the apps pull with the managed identity `id-cdf-pull`.
 - **Application secrets:** the SQL password, the JWT signing key and the PIN secret are generated inside the script, sent straight to Container Apps secrets and never printed, logged or written to a file. Only the **bootstrap admin password** is typed by you, without echo.
 - **GitHub:** the script sets the repository secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` and the repository variable `ACR_NAME` (they are identifiers, not passwords).
@@ -53,6 +54,10 @@ You need: an Azure account whose subscription is **pay-as-you-go** (the script s
 7. At the end it prints the production address. Until the first deploy it shows a placeholder page, not the app.
 
 Options: `-DeployRoleScope ResourceGroup` (see "If the deploy is refused"), `-BackupRedundancy Local` (if Azure refuses zone-redundant backups in Brazil South for the Basic tier).
+
+The script stops (before creating anything) if the subscription is not **pay-as-you-go**: a free trial, a spending limit, or any other offer (Visual Studio credits, enterprise or partner agreements) is refused on purpose, because the budget and the always-on apps assume pay-as-you-go billing.
+
+The bootstrap admin password may use only letters, digits and `. _ @ # + = -` (at least 12 characters): on Windows the Azure CLI is a `.cmd` file and symbols such as `&`, `%` or `"` can be cut or changed on the way, which would store a different password than the one you typed. It is forced to change at the first login anyway, so choose your real password then.
 
 Do not run the script inside a recorded session (`Start-Transcript`, a screen recorder). It never prints a secret, but while an `az` command runs its arguments are visible to other programs of your Windows user for a few seconds; that is how the Azure CLI takes a secret value.
 
@@ -74,6 +79,8 @@ Open <https://portal.azure.com> and the resource group `rg-control-diario-prod`.
 
 ## Deploy and rollback
 
+**Before the first deploy, expect to verify it.** The deploy updates the apps with `az containerapp update --yaml` (a full template: image, settings and probes). It has not been tried against Azure, and two things can go wrong the first time. (1) If Azure replaces instead of keeping the secrets, the API fails with "secret not found": check *Container app → Secrets*. (2) If the step fails with an authorization error, see "If the deploy is refused". After the first successful run, check in the portal: *Secrets* still lists the four secrets, *Ingress* shows target port **8080** (the workflow sets it in a separate step; if the run stopped between the two, run it again), and *Revisions* shows the new revision healthy with 1 replica.
+
 **Deploy** (the first time and every time): on GitHub open the repository → *Actions* → **Deploy production** → *Run workflow*, branch **main**, leave *sha* empty (it deploys the tip of `main`) and press *Run workflow*. A merge to `main` never deploys. The workflow:
 
 1. only takes commits that are part of `main` and that passed CI;
@@ -81,7 +88,7 @@ Open <https://portal.azure.com> and the resource group `rg-control-diario-prod`.
 3. updates both apps from `infra/containerapps/*.yaml` (image, settings, **probes**) and sets their ingress port to 8080;
 4. waits until `https://<address>/health` answers 200 through the client.
 
-**Rollback:** run the same workflow and put the **previous SHA** (shown in the log of the earlier run, or in `git log`) in *sha*. Its images are already in the registry, so nothing is rebuilt. If the bad release ran a database migration, rolling back the code does not undo it: see below.
+**Rollback:** run the same workflow and put the **previous SHA** (the workflow applies the YAML files of *that* commit, so it cannot go back to a commit from before `infra/containerapps/` existed) (shown in the log of the earlier run, or in `git log`) in *sha*. Its images are already in the registry, so nothing is rebuilt. If the bad release ran a database migration, rolling back the code does not undo it: see below.
 
 ### The probes
 
@@ -113,7 +120,7 @@ Do this once after the first real data is in, and write the result in the table 
 
 ## First-time setup in the app
 
-1. Open the production address and log in as **`admin`** with the bootstrap password you typed. The app forces you to choose a **new password** before anything else (that is `DebeCambiarPassword`); choose a long one and keep it in your password manager. The bootstrap password in the Azure secret `admin-password` is only used while there are no users: it is not a way in afterwards.
+1. Open the production address and log in as **`admin`** with the bootstrap password you typed. The app forces you to choose a **new password** before anything else (that is `DebeCambiarPassword`); choose a long one and keep it in your password manager. The bootstrap password in the Azure secret `admin-password` is only used to create the first admin while there are no users: it is not a way in afterwards. But the API still **requires the secret to exist (at least 8 characters) at every start**, so do not delete it, and it stays stored there with the password you typed in the script. If the database is ever restored empty, the API would recreate `admin` with that password (forced to change again), so treat it as a secret you can rotate: container app `cdf-api` → *Secrets* → edit `admin-password`, then restart.
 2. **Usuarios** → create the real people, each with a temporary password that they must change at their first login:
    - the agronomist: role **Administrador**;
    - the office clerk: role **Administrador** (as agreed for the pilot; the Oficina role exists and is not used yet);

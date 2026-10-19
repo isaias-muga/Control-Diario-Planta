@@ -159,6 +159,8 @@ function Read-AdminPassword {
         $second = ConvertTo-PlainText (Read-Host 'Type it again' -AsSecureString)
         if ($first -cne $second) { Write-Host 'They do not match. Try again.' -ForegroundColor Yellow; continue }
         if ($first.Length -lt 12) { Write-Host 'It needs at least 12 characters. Try again.' -ForegroundColor Yellow; continue }
+        # On Windows az is a .cmd file: characters like & | < > ^ % " ! ' ; or a space would be read by cmd.exe and could cut or change the secret
+        if ($first -notmatch '^[A-Za-z0-9._@#+=-]+$') { Write-Host 'Use only letters, digits and . _ @ # + = - (other symbols can be mangled on the way to Azure). Try again.' -ForegroundColor Yellow; continue }
         return $first
     }
 }
@@ -396,6 +398,8 @@ else {
     $sAdmin = New-Secret $adminPassword 'admin-password=***' 'admin-password='
 
     Invoke-WithRetry {
+        # A retry after a call that half worked must not fail on "already exists"
+        if (Test-AzExists @('containerapp', 'show', '--name', $ApiApp, '--resource-group', $ResourceGroup)) { return }
         Invoke-Az -CliArgs @('containerapp', 'create', '--name', $ApiApp, '--resource-group', $ResourceGroup, '--environment', $EnvironmentName,
             '--image', $PlaceholderImage, '--ingress', 'internal', '--target-port', $PlaceholderPort,
             '--min-replicas', '1', '--max-replicas', '1', '--cpu', '0.25', '--memory', '0.5Gi',
@@ -416,6 +420,7 @@ else {
 if ($clientExists) { Write-Info "$ClientApp already exists." }
 else {
     Invoke-WithRetry {
+        if (Test-AzExists @('containerapp', 'show', '--name', $ClientApp, '--resource-group', $ResourceGroup)) { return }
         Invoke-Az -CliArgs @('containerapp', 'create', '--name', $ClientApp, '--resource-group', $ResourceGroup, '--environment', $EnvironmentName,
             '--image', $PlaceholderImage, '--ingress', 'external', '--target-port', $PlaceholderPort,
             '--min-replicas', '1', '--max-replicas', '1', '--cpu', '0.25', '--memory', '0.5Gi',
@@ -441,7 +446,8 @@ else {
 $deployPrincipalId = Get-AzValue @('ad', 'sp', 'show', '--id', $deployAppId, '--query', 'id', '--output', 'tsv')
 if ($deployPrincipalId) { Write-Info 'Service principal already exists.' }
 else {
-    $deployPrincipalId = (Invoke-Az -CliArgs @('ad', 'sp', 'create', '--id', $deployAppId, '--query', 'id', '--output', 'tsv')).Output
+    # Microsoft Entra needs a moment to see a registration created seconds ago
+    $deployPrincipalId = Invoke-WithRetry { (Invoke-Az -CliArgs @('ad', 'sp', 'create', '--id', $deployAppId, '--query', 'id', '--output', 'tsv')).Output }
     if (-not $deployPrincipalId) { $deployPrincipalId = '<deploy-principal-id>' }
 }
 
@@ -460,10 +466,10 @@ else {
     $credentialFile = Write-TempJson $credentialBody
     try {
         if ($existingCredential) {
-            Invoke-Az -CliArgs @('ad', 'app', 'federated-credential', 'update', '--id', $deployAppId, '--federated-credential-id', $FederatedCredentialName, '--parameters', "@$credentialFile") | Out-Null
+            Invoke-WithRetry { Invoke-Az -CliArgs @('ad', 'app', 'federated-credential', 'update', '--id', $deployAppId, '--federated-credential-id', $FederatedCredentialName, '--parameters', "@$credentialFile") | Out-Null }
         }
         else {
-            Invoke-Az -CliArgs @('ad', 'app', 'federated-credential', 'create', '--id', $deployAppId, '--parameters', "@$credentialFile") | Out-Null
+            Invoke-WithRetry { Invoke-Az -CliArgs @('ad', 'app', 'federated-credential', 'create', '--id', $deployAppId, '--parameters', "@$credentialFile") | Out-Null }
         }
     }
     finally { Remove-Item -LiteralPath $credentialFile -Force -ErrorAction SilentlyContinue }

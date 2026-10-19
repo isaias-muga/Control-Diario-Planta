@@ -39,6 +39,11 @@ jobs:
           INPUT_SHA: ${{ inputs.sha }}
         run: |
           requested="${INPUT_SHA:-origin/main}"
+          # A commit id or origin/main, nothing that git could read as an option
+          if ! printf '%s' "$requested" | grep -Eq '^([0-9a-fA-F]{4,40}|origin/main)$'; then
+            echo "::error::sha must be a commit id (4 to 40 hex characters) or empty."
+            exit 1
+          fi
           full="$(git rev-parse --verify "${requested}^{commit}")"
           # Only commits that are part of main can reach production
           if ! git merge-base --is-ancestor "$full" origin/main; then
