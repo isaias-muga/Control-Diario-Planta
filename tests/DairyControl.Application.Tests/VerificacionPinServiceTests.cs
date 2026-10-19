@@ -51,6 +51,7 @@ namespace DairyControl.Application.Tests
         [Theory]
         [InlineData(RolUsuario.Admin)]
         [InlineData(RolUsuario.Oficina)]
+        [InlineData(RolUsuario.Consulta)]
         public async Task ResolverAsync_RoleThatNeedsNoPin_ReturnsNullWithoutLookingAnything(RolUsuario rol)
         {
             // Arrange

@@ -71,6 +71,7 @@ namespace DairyControl.Application.Tests
         [Theory]
         [InlineData(RolUsuario.Admin, 12 * 60)]
         [InlineData(RolUsuario.Oficina, 12 * 60)]
+        [InlineData(RolUsuario.Consulta, 12 * 60)]
         [InlineData(RolUsuario.Recepcion, 7 * 24 * 60)]
         public async Task LoginAsync_ValidCredentials_TokenLifetimeDependsOnTheRole(RolUsuario rol, int minutos)
         {

@@ -207,6 +207,21 @@ namespace DairyControl.Domain.Tests
         }
 
         [Fact]
+        public void CambiarRol_ToConsulta_ChangesRolAndStamp()
+        {
+            // Arrange
+            var usuario = NuevoUsuario(RolUsuario.Oficina);
+            var sello = usuario.SecurityStamp;
+
+            // Act
+            usuario.CambiarRol(RolUsuario.Consulta);
+
+            // Assert
+            Assert.Equal(RolUsuario.Consulta, usuario.Rol);
+            Assert.NotEqual(sello, usuario.SecurityStamp);
+        }
+
+        [Fact]
         public void CambiarRol_UndefinedRol_ThrowsReglaDeNegocioException()
         {
             // Arrange

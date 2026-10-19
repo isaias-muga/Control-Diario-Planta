@@ -56,6 +56,22 @@ namespace DairyControl.Api.Tests
         }
 
         [Fact]
+        public async Task Consulta_Registers_Gets403AndNothingIsSaved()
+        {
+            // Arrange
+            var cliente = _fabrica.ClienteDe(RolUsuario.Consulta);
+            var ruta = $"/api/Proveedores/{Guid.NewGuid()}/recepciones";
+            _fabrica.Recepciones.Invocations.Clear();
+
+            // Act
+            var respuesta = await cliente.PostAsJsonAsync(ruta, Cuerpo(2), TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(HttpStatusCode.Forbidden, respuesta.StatusCode);
+            _fabrica.Recepciones.Verify(r => r.AddAsync(It.IsAny<RecepcionLeche>()), Times.Never);
+        }
+
+        [Fact]
         public async Task Oficina_WithoutSilo_Gets400OnSiloAndNothingIsSaved()
         {
             // Arrange

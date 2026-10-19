@@ -2,11 +2,11 @@ namespace DairyControl.Api.Authorization
 {
     /// <summary>
     /// The authorization policies. Every controller action names one of them (an architecture test checks it); anything that names none
-    /// falls to <see cref="Lectura"/>, so a forgotten attribute is never more open than "Admin or Oficina".
+    /// falls to <see cref="Lectura"/>, so a forgotten attribute is never more open than a read.
     /// </summary>
     public static class Politicas
     {
-        /// <summary>Admin or Oficina: the office reads everything. This is also the default and the fallback policy.</summary>
+        /// <summary>Admin, Oficina or Consulta: reads everything. This is also the default and the fallback policy.</summary>
         public const string Lectura = "Lectura";
 
         /// <summary>What the reception phone may also read: the proveedor options, the next ticket and the quality limits.</summary>
