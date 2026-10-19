@@ -70,6 +70,23 @@ namespace DairyControl.Api.Tests
         }
 
         [Fact]
+        public async Task HealthLive_DatabaseNotReachable_Returns200WithoutToken()
+        {
+            // Arrange: the database cannot be reached, as in an outage; liveness must not depend on it
+            using var server = await StartAsync(services =>
+            {
+                services.AddDbContext<AppDbContext>(options => { });
+                services.AddDairyControlHealthChecks();
+            });
+
+            // Act
+            var response = await server.CreateClient().GetAsync(HealthEndpoints.PathLive, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+        }
+
+        [Fact]
         public void AddDairyControlHealthChecks_Registered_DatabaseCheckHasTimeout()
         {
             // Arrange

@@ -35,6 +35,7 @@ namespace DairyControl.Api.Tests
             // The configuration the real Program reads while it registers its services
             Environment.SetEnvironmentVariable("Jwt__SigningKey", ClaveJwt);
             Environment.SetEnvironmentVariable("Pin__Secret", ClavePin);
+            Environment.SetEnvironmentVariable("AdminUser__Password", "una-clave-de-admin-de-prueba");
             Environment.SetEnvironmentVariable("HttpsRedirection__Enabled", "false");
         }
 

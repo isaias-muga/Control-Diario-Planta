@@ -138,7 +138,7 @@ namespace DairyControl.Api.Tests
         }
 
         [Fact]
-        public void AnonymousEndpoints_AreExactlyLoginAndHealth()
+        public void AnonymousEndpoints_AreExactlyLoginAndTheHealthProbes()
         {
             // Arrange
             var fuentes = _fabrica.Services.GetServices<EndpointDataSource>();
@@ -151,7 +151,7 @@ namespace DairyControl.Api.Tests
                 .ToList();
 
             // Assert
-            Assert.Equal(["/health", "api/Auth/login"], anonimos);
+            Assert.Equal(["/health", "/health/live", "api/Auth/login"], anonimos);
         }
 
         [Fact]
