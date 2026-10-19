@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '../fixtures';
-import { cambiarCantidadSilosPorApi, crearProveedor, loginYEsperarResumen, rellenar, ticketUnico } from '../helpers';
+import { cambiarCantidadSilosPorApi, crearProveedor, loginYEsperarInicio, rellenar, ticketUnico } from '../helpers';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
 test.beforeEach(async ({ page }) => {
-  await loginYEsperarResumen(page);
+  await loginYEsperarInicio(page);
 });
 
 interface Carga {

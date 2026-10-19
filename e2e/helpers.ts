@@ -44,9 +44,10 @@ export async function login(page: Page, password = adminPassword(), usuario = 'a
   await page.getByRole('button', { name: 'Ingresar' }).click();
 }
 
-export async function loginYEsperarResumen(page: Page): Promise<void> {
+/** Admin and Oficina start on Recepciones (the "Hoy" filter); Consulta starts on Resumen. */
+export async function loginYEsperarInicio(page: Page): Promise<void> {
   await login(page);
-  await expect(page.getByRole('heading', { name: 'Resumen de recepciones' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Recepciones', exact: true })).toBeVisible();
 }
 
 /** Creates a proveedor with a unique name through the UI and opens its detail page. */
@@ -204,7 +205,7 @@ export interface PersonaDePrueba {
 }
 
 /** Creates a user of that role through the admin API, with the temporary password. */
-export async function crearUsuarioPorApi(request: APIRequestContext, rol: 'Admin' | 'Oficina' | 'Recepcion'): Promise<PersonaDePrueba> {
+export async function crearUsuarioPorApi(request: APIRequestContext, rol: 'Admin' | 'Oficina' | 'Consulta' | 'Recepcion'): Promise<PersonaDePrueba> {
   const headers = await cabecerasAutenticadas(request);
   const sufijo = uniqueSuffix().replace(/[^a-z0-9]/gi, '');
   const persona = { username: `e2e.${rol.toLowerCase()}.${sufijo}`, nombre: `E2E ${rol} ${sufijo}` };
@@ -227,7 +228,7 @@ export async function elegirPasswordPorApi(request: APIRequestContext, username:
 }
 
 /** A user that already chose its password, ready to log in with PASSWORD_PROPIA. */
-export async function crearUsuarioListoPorApi(request: APIRequestContext, rol: 'Admin' | 'Oficina' | 'Recepcion'): Promise<PersonaDePrueba> {
+export async function crearUsuarioListoPorApi(request: APIRequestContext, rol: 'Admin' | 'Oficina' | 'Consulta' | 'Recepcion'): Promise<PersonaDePrueba> {
   const persona = await crearUsuarioPorApi(request, rol);
   await elegirPasswordPorApi(request, persona.username);
   return persona;

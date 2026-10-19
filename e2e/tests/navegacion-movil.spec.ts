@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '../fixtures';
-import { crearProveedor, irAConfiguracion, loginYEsperarResumen } from '../helpers';
+import { crearProveedor, irAConfiguracion, loginYEsperarInicio } from '../helpers';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
@@ -12,7 +12,7 @@ async function sinScrollHorizontal(page: Page): Promise<void> {
 }
 
 test.beforeEach(async ({ page }) => {
-  await loginYEsperarResumen(page);
+  await loginYEsperarInicio(page);
 });
 
 test('movil: the three tabs fit the screen and the gear opens Configuración', async ({ page }) => {

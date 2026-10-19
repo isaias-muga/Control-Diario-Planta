@@ -1,8 +1,8 @@
 import { expect, test } from '../fixtures';
-import { login, loginYEsperarResumen } from '../helpers';
+import { login, loginYEsperarInicio } from '../helpers';
 
-test('login: valid credentials open the Resumen page', async ({ page }) => {
-  await loginYEsperarResumen(page);
+test('login: valid credentials open the Recepciones page', async ({ page }) => {
+  await loginYEsperarInicio(page);
 });
 
 test('login: wrong password shows an error and stays on the login page', async ({ page }) => {
