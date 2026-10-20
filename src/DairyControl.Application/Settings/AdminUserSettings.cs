@@ -10,5 +10,12 @@
         /// tests and the demo set it to false.
         /// </summary>
         public bool ForzarCambioPassword { get; set; } = true;
+
+        /// <summary>
+        /// Usernames of the owner accounts, separated by commas (AdminUser:Protegidos). Together with <see cref="Username"/> they are the
+        /// protected accounts: another Admin cannot deactivate them, demote them or reset their password. Only configuration decides it;
+        /// no endpoint can set or clear the flag.
+        /// </summary>
+        public string Protegidos { get; set; } = string.Empty;
     }
 }

@@ -19,7 +19,7 @@ namespace DairyControl.Infrastructure.Persistence.Configurations
             builder.Property(c => c.ValorNuevo).HasMaxLength(CambioRegistrado.ValorMaxLength);
             builder.Property(c => c.EnUtc);
             builder.Property(c => c.Motivo).IsRequired().HasMaxLength(Domain.ValueObjects.MotivoDeCambio.MaxLength);
-            // The same table describes recepciones and proveedores, so EntidadId has no foreign key; the user is never deleted
+            // The same table describes recepciones, proveedores, usuarios and operarios, so EntidadId has no foreign key; the user is never deleted
             builder.HasOne<Usuario>()
                 .WithMany()
                 .HasForeignKey(c => c.UsuarioId)

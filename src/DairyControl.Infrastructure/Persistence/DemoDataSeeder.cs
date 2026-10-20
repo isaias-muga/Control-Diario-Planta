@@ -61,8 +61,11 @@ namespace DairyControl.Infrastructure.Persistence
                 await using var transaccion = await _context.Database.BeginTransactionAsync();
 
                 // The demo reset is the one place that deletes recepciones and proveedores (real data is only ever corrected, voided or
-                // deactivated); the history that describes them goes with them. An architecture test allows only this file.
-                await _context.HistorialCambios.ExecuteDeleteAsync();
+                // deactivated); the history that describes them goes with them. The history of usuarios and operarios stays: they are
+                // never deleted. An architecture test allows only this file.
+                await _context.HistorialCambios
+                    .Where(c => c.Entidad == CambioRegistrado.EntidadRecepcion || c.Entidad == CambioRegistrado.EntidadProveedor)
+                    .ExecuteDeleteAsync();
                 recepcionesBorradas = await _context.Recepciones.ExecuteDeleteAsync();
                 proveedoresBorrados = await _context.Proveedores.ExecuteDeleteAsync();
 

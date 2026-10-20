@@ -1,4 +1,5 @@
 using DairyControl.Domain.Exceptions;
+using DairyControl.Domain.ValueObjects;
 
 namespace DairyControl.Domain.Entities
 {
@@ -41,12 +42,42 @@ namespace DairyControl.Domain.Entities
             }
         }
 
-        public void Desactivar() => Activo = false;
+        /// <summary>The history entry of the creation of this operario.</summary>
+        public CambioRegistrado RegistrarAlta(Guid usuarioId, DateTime enUtc) =>
+            CambioRegistrado.Crear(CambioRegistrado.EntidadOperario, Id, Guid.NewGuid(), CambioRegistrado.Campos.Alta, null, Nombre, usuarioId, enUtc, MotivoDeCambio.Create("Alta de operario"));
 
-        public void CambiarPin(string pinHash)
+        public CambioRegistrado Desactivar(MotivoDeCambio motivo, Guid usuarioId, DateTime enUtc)
+        {
+            ArgumentNullException.ThrowIfNull(motivo);
+            if (!Activo)
+            {
+                throw new ReglaDeNegocioException("El operario ya está desactivado.", "id");
+            }
+            var cambio = CambioRegistrado.Crear(CambioRegistrado.EntidadOperario, Id, Guid.NewGuid(), CambioRegistrado.Campos.Activo, "Activo", "Inactivo", usuarioId, enUtc, motivo);
+            Activo = false;
+            return cambio;
+        }
+
+        /// <summary>Its PIN works again. The caller checks that no other active operario uses the same PIN.</summary>
+        public CambioRegistrado Reactivar(MotivoDeCambio motivo, Guid usuarioId, DateTime enUtc)
+        {
+            ArgumentNullException.ThrowIfNull(motivo);
+            if (Activo)
+            {
+                throw new ReglaDeNegocioException("El operario ya está activo.", "id");
+            }
+            var cambio = CambioRegistrado.Crear(CambioRegistrado.EntidadOperario, Id, Guid.NewGuid(), CambioRegistrado.Campos.Activo, "Inactivo", "Activo", usuarioId, enUtc, motivo);
+            Activo = true;
+            return cambio;
+        }
+
+        /// <summary>The history says that the PIN changed, never the PIN or its hash.</summary>
+        public CambioRegistrado CambiarPin(string pinHash, Guid usuarioId, DateTime enUtc)
         {
             ValidarHash(pinHash);
+            var cambio = CambioRegistrado.Crear(CambioRegistrado.EntidadOperario, Id, Guid.NewGuid(), CambioRegistrado.Campos.Pin, null, "Cambiado", usuarioId, enUtc, MotivoDeCambio.Create("PIN cambiado"));
             PinHash = pinHash;
+            return cambio;
         }
 
         private static void ValidarHash(string? hash)

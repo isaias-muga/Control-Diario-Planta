@@ -29,6 +29,10 @@ namespace DairyControl.Api.Middleware
             {
                 await Escribir(context, StatusCodes.Status400BadRequest, ApiErrors.Body(ex.Message, ex.Campo));
             }
+            catch (CuentaProtegidaException ex)
+            {
+                await Escribir(context, StatusCodes.Status403Forbidden, ApiErrors.Body(ex.Message));
+            }
             catch (DemasiadosIntentosException ex)
             {
                 await Escribir(context, StatusCodes.Status429TooManyRequests, ApiErrors.Body(ex.Message));

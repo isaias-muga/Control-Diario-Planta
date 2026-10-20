@@ -1,5 +1,6 @@
 using DairyControl.Domain.Enums;
 using DairyControl.Domain.Exceptions;
+using DairyControl.Domain.ValueObjects;
 
 namespace DairyControl.Domain.Entities
 {
@@ -14,6 +15,8 @@ namespace DairyControl.Domain.Entities
 
         public const int MaxFallosLogin = 5;
         public static readonly TimeSpan BloqueoLogin = TimeSpan.FromMinutes(15);
+
+        public const string MensajeUltimoAdmin = "Tiene que quedar al menos un administrador activo.";
 
         public const int MaxFallosPin = 5;
         public static readonly TimeSpan VentanaPin = TimeSpan.FromMinutes(10);
@@ -31,6 +34,15 @@ namespace DairyControl.Domain.Entities
 
         /// <summary>True after the user was created or the password was reset by an admin: nothing else is allowed until the user chooses a new one.</summary>
         public bool DebeCambiarPassword { get; private set; }
+
+        /// <summary>
+        /// An owner account: no other Admin can deactivate it, demote it or reset its password. It is set only from configuration at startup
+        /// (<see cref="MarcarProtegido"/>), never from an endpoint.
+        /// </summary>
+        public bool Protegido { get; private set; }
+
+        /// <summary>An active Admin: the system always needs at least one.</summary>
+        public bool EsAdminActivo => Activo && Rol == RolUsuario.Admin;
 
         public int FallosLogin { get; private set; }
         public DateTime? LoginBloqueadoHastaUtc { get; private set; }
@@ -77,10 +89,59 @@ namespace DairyControl.Domain.Entities
             }
         }
 
-        public void Desactivar()
+        /// <summary>The history entry of the creation of this user (credited to whoever created it): the role it started with.</summary>
+        public CambioRegistrado RegistrarAlta(Guid usuarioId, DateTime enUtc, string motivo = "Alta de usuario") =>
+            CambioRegistrado.Crear(CambioRegistrado.EntidadUsuario, Id, Guid.NewGuid(), CambioRegistrado.Campos.Rol, null, Rol.ToString(), usuarioId, enUtc, MotivoDeCambio.Create(motivo));
+
+        /// <summary>Only configuration decides who is an owner account. Returns true when the flag changed.</summary>
+        public bool MarcarProtegido(bool protegido)
         {
+            if (Protegido == protegido)
+            {
+                return false;
+            }
+            Protegido = protegido;
+            return true;
+        }
+
+        /// <summary>A protected account can only be changed by its own user (anyone else gets <see cref="CuentaProtegidaException"/>).</summary>
+        public void ValidarModificablePor(Guid actorId)
+        {
+            if (Protegido && actorId != Id)
+            {
+                throw new CuentaProtegidaException("Esta cuenta está protegida: otro administrador no puede desactivarla, cambiarle el rol ni restablecerle la contraseña.");
+            }
+        }
+
+        /// <summary>Ends the sessions at once. Returns the history entry.</summary>
+        public CambioRegistrado Desactivar(MotivoDeCambio motivo, Guid actorId, DateTime enUtc)
+        {
+            ArgumentNullException.ThrowIfNull(motivo);
+            ValidarModificablePor(actorId);
+            if (!Activo)
+            {
+                throw new ReglaDeNegocioException("El usuario ya está desactivado.", "id");
+            }
+            var cambio = CambioRegistrado.Crear(CambioRegistrado.EntidadUsuario, Id, Guid.NewGuid(), CambioRegistrado.Campos.Activo, "Activo", "Inactivo", actorId, enUtc, motivo);
             Activo = false;
             SecurityStamp = Guid.NewGuid();
+            return cambio;
+        }
+
+        /// <summary>Back in with new sessions only (new stamp); the user must choose a password of their own at the next login.</summary>
+        public CambioRegistrado Reactivar(MotivoDeCambio motivo, Guid actorId, DateTime enUtc)
+        {
+            ArgumentNullException.ThrowIfNull(motivo);
+            if (Activo)
+            {
+                throw new ReglaDeNegocioException("El usuario ya está activo.", "id");
+            }
+            var cambio = CambioRegistrado.Crear(CambioRegistrado.EntidadUsuario, Id, Guid.NewGuid(), CambioRegistrado.Campos.Activo, "Inactivo", "Activo", actorId, enUtc, motivo);
+            Activo = true;
+            DebeCambiarPassword = true;
+            SecurityStamp = Guid.NewGuid();
+            ReiniciarFallosLogin();
+            return cambio;
         }
 
         /// <summary>The user chose a new password: the old sessions end and the obligation to change it is over.</summary>
@@ -94,20 +155,32 @@ namespace DairyControl.Domain.Entities
         }
 
         /// <summary>An admin set a temporary password: the user must choose another one at the next login.</summary>
-        public void RestablecerPassword(string passwordHash)
+        public CambioRegistrado RestablecerPassword(string passwordHash, Guid actorId, DateTime enUtc)
         {
+            ValidarModificablePor(actorId);
             ValidarHash(passwordHash);
+            // The history says that it happened, never the password or its hash
+            var cambio = CambioRegistrado.Crear(CambioRegistrado.EntidadUsuario, Id, Guid.NewGuid(), CambioRegistrado.Campos.Password, null, "Restablecida", actorId, enUtc, MotivoDeCambio.Create("Contraseña restablecida"));
             PasswordHash = passwordHash;
             DebeCambiarPassword = true;
             SecurityStamp = Guid.NewGuid();
             ReiniciarFallosLogin();
+            return cambio;
         }
 
-        public void CambiarRol(RolUsuario rol)
+        public CambioRegistrado CambiarRol(RolUsuario rol, MotivoDeCambio motivo, Guid actorId, DateTime enUtc)
         {
+            ArgumentNullException.ThrowIfNull(motivo);
+            ValidarModificablePor(actorId);
             ValidarRol(rol);
+            if (rol == Rol)
+            {
+                throw new ReglaDeNegocioException("El usuario ya tiene ese rol.", nameof(rol));
+            }
+            var cambio = CambioRegistrado.Crear(CambioRegistrado.EntidadUsuario, Id, Guid.NewGuid(), CambioRegistrado.Campos.Rol, Rol.ToString(), rol.ToString(), actorId, enUtc, motivo);
             Rol = rol;
             SecurityStamp = Guid.NewGuid();
+            return cambio;
         }
 
         public bool LoginBloqueado(DateTime ahoraUtc) => LoginBloqueadoHastaUtc > ahoraUtc;

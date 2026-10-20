@@ -10,10 +10,16 @@ namespace DairyControl.Domain.Interfaces
         Task<Operario?> GetActivoPorPinHashAsync(string pinHash);
         Task<IReadOnlyList<Operario>> GetAllAsync();
 
-        /// <summary>Throws <see cref="Exceptions.ConflictoDeUnicidadException"/> when another active operario has the same PIN.</summary>
-        Task AddAsync(Operario operario);
+        /// <summary>
+        /// Saves a new operario together with its creation entry in the history (both or none).
+        /// Throws <see cref="Exceptions.ConflictoDeUnicidadException"/> when another active operario has the same PIN.
+        /// </summary>
+        Task AddAsync(Operario operario, CambioRegistrado cambio);
 
-        /// <summary>Saves the changes of an operario loaded from this repository.</summary>
-        Task UpdateAsync(Operario operario);
+        /// <summary>
+        /// Saves the changes of an operario loaded from this repository together with the history entry that describes them (both or
+        /// none). Throws <see cref="Exceptions.ConflictoDeUnicidadException"/> when another active operario has the same PIN.
+        /// </summary>
+        Task UpdateAsync(Operario operario, CambioRegistrado cambio);
     }
 }
