@@ -77,6 +77,7 @@ test('correcciones: a ticket that another recepción uses is refused and nothing
 
   await abrirMenuDeFila(page, primera.ticket);
   await page.getByRole('menuitem', { name: 'Corregir' }).click();
+  await expect(page.getByRole('heading', { name: 'Corregir recepción' })).toBeVisible(); // the page, not the list behind it
   await expect(page.getByLabel(/^Ticket/)).toHaveValue(String(primera.ticket));
   await rellenar(page.getByLabel(/^Ticket/), String(segunda.ticket));
   await rellenar(page.getByLabel('Motivo de la corrección'), 'Ticket mal copiado');
@@ -117,6 +118,7 @@ test('correcciones: a correction needs a reason and a change', async ({ page, re
   await abrirProveedor(page, proveedor.id, proveedor.nombre);
   await abrirMenuDeFila(page, ticket);
   await page.getByRole('menuitem', { name: 'Corregir' }).click();
+  await expect(page.getByRole('heading', { name: 'Corregir recepción' })).toBeVisible(); // the page, not the list behind it
   await expect(page.getByLabel(/^Litros/)).toHaveValue('1.000');
 
   // Nothing changed, with a reason
