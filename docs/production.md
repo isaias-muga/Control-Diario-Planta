@@ -99,6 +99,10 @@ The script is safe to run again after any failure: each step checks what already
 
 **Rollback:** run the same workflow and put the **previous SHA** (the workflow applies the YAML files of *that* commit, so it cannot go back to a commit from before `infra/containerapps/` existed) (shown in the log of the earlier run, or in `git log`) in *sha*. Its images are already in the registry, so nothing is rebuilt. If the bad release ran a database migration, rolling back the code does not undo it: see below.
 
+### Corrections and voids: the migration
+
+The release that adds corrections, voids and proveedor deactivation has a migration (`AgregarCorreccionesAnulacionYBajaDeProveedores`): new nullable columns on `Recepciones` (`AnuladaEn`, `AnuladaPorUsuarioId`, `MotivoAnulacion`) and a row version, `Proveedores.Activo` (default 1: every existing proveedor stays active) and a row version, and the new table `HistorialCambios`. It is backward compatible with the previous release (which inserts without any of these columns), as every migration must be, because the old revision keeps serving while the new one migrates. Nothing is deleted by this change and there is no DELETE endpoint; the production data is only ever corrected, voided or deactivated, each with a reason in the history.
+
 ### The probes
 
 - `cdf-api`: **startup** and **readiness** on `/health` (200 only when the database answers; the startup probe allows up to 5 minutes because the API migrates the database before it listens), **liveness** on `/health/live` (just "the process answers": a database outage does not restart the API).

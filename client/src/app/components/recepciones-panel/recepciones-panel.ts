@@ -101,6 +101,9 @@ export class RecepcionesPanel {
   /** Proveedores offered by the selector; null when the proveedor is fixed. */
   protected proveedoresParaSelector = computed(() => (this.proveedorFijo() ? null : this.proveedores()));
 
+  /** Voided recepciones shown in the list (when asked for): they are rows, but they never count in the totals. */
+  protected anuladasMostradas = computed(() => this.items().filter((r) => r.anulada).length);
+
   protected litrosPorAgua = computed(() => {
     const t = this.totales();
     return t ? t.litros - t.litrosReales : 0;

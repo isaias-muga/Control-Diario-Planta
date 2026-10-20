@@ -244,6 +244,41 @@ describe('RecepcionesPanel', () => {
       req.flush(listado());
     });
 
+    it('counts only the recepciones that count and says how many voided ones are shown, and still shows the list when all of them are voided', async () => {
+      await abrir('/?anuladas=1');
+      await cargar();
+
+      // cargar() answered the first request; this is a second load with voided rows only
+      filtros().cambio.emit({ desde: '2026-10-14', hasta: '2026-10-14', proveedorId: null, ticket: null, soloFueraDeRango: false, incluirAnuladas: true });
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+      pedidoListado().flush(
+        listado({
+          items: [recepcion({ id: 'a' }), recepcion({ id: 'b', anulada: true }), recepcion({ id: 'c', anulada: true })],
+          totales: totales({ cantidadRecepciones: 1 }),
+        }),
+      );
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+
+      expect(texto('.pie')).toContain('1 de 1 recepciones · 2 anuladas (no suma)');
+    });
+
+    it('shows the list, not "No hay recepciones", when the only rows are voided ones', async () => {
+      await abrir('/?anuladas=1');
+      await cargar();
+
+      filtros().cambio.emit({ desde: '2026-10-14', hasta: '2026-10-14', proveedorId: null, ticket: null, soloFueraDeRango: false, incluirAnuladas: true });
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+      pedidoListado().flush(listado({ items: [recepcion({ id: 'z', anulada: true })], totales: totales({ cantidadRecepciones: 0, litros: 0, litrosReales: 0, ticketMinimo: null, ticketMaximo: null, cantidadFueraDeRango: 0 }) }));
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+
+      expect(harness.routeNativeElement?.textContent).not.toContain('No hay recepciones con estos filtros.');
+      expect(texto('.pie')).toContain('0 de 0 recepciones · 1 anulada (no suma)');
+    });
+
     it('writes "Incluir anuladas" to the URL and asks for the voided ones', async () => {
       await abrir('/');
       await cargar();
