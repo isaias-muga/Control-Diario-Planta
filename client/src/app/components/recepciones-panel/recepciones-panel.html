@@ -59,7 +59,7 @@
     </mat-card>
   </section>
 
-  @if (t.cantidadRecepciones === 0) {
+  @if (t.cantidadRecepciones === 0 && items().length === 0) {
     <p class="state-message">No hay recepciones con estos filtros.</p>
   } @else {
     <mat-card appearance="outlined" class="lista-card">
@@ -70,6 +70,7 @@
         [hayMas]="hayMas()"
         [cargandoMas]="cargandoMas()"
         (cargarMas)="cargarMas()"
+        (cambio)="recargar()"
       />
 
       @if (errorMas(); as mensaje) {
@@ -84,7 +85,12 @@
             (editables en <a routerLink="/configuracion">Configuración</a>)
           }
         </span>
-        <span class="conteo">{{ items().length | number: '1.0-0' }} de {{ t.cantidadRecepciones | number: '1.0-0' }} recepciones</span>
+        <span class="conteo">
+          {{ items().length - anuladasMostradas() | number: '1.0-0' }} de {{ t.cantidadRecepciones | number: '1.0-0' }} recepciones
+          @if (anuladasMostradas() > 0) {
+            · {{ anuladasMostradas() }} {{ anuladasMostradas() === 1 ? 'anulada' : 'anuladas' }} (no suma)
+          }
+        </span>
       </footer>
     </mat-card>
   }

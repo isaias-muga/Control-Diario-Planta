@@ -23,6 +23,18 @@ namespace DairyControl.Infrastructure.Tests
                 "BEGIN UPDATE Usuarios SET RowVersion = randomblob(8) WHERE Id = NEW.Id; END;");
         }
 
+        /// <summary>
+        /// The same for Recepciones and Proveedores, which also have a rowversion now (a stale correction is refused). Called by the tests that
+        /// need to see a concurrency conflict; a trigger fires on any update of the row.
+        /// </summary>
+        public static void InstalarVersionDeFilaDeRecepcionesYProveedores(AppDbContext context)
+        {
+            context.Database.ExecuteSqlRaw("CREATE TRIGGER Recepciones_RowVersion_Insert AFTER INSERT ON Recepciones BEGIN UPDATE Recepciones SET RowVersion = randomblob(8) WHERE Id = NEW.Id; END;");
+            context.Database.ExecuteSqlRaw("CREATE TRIGGER Recepciones_RowVersion_Update AFTER UPDATE ON Recepciones BEGIN UPDATE Recepciones SET RowVersion = randomblob(8) WHERE Id = NEW.Id; END;");
+            context.Database.ExecuteSqlRaw("CREATE TRIGGER Proveedores_RowVersion_Insert AFTER INSERT ON Proveedores BEGIN UPDATE Proveedores SET RowVersion = randomblob(8) WHERE Id = NEW.Id; END;");
+            context.Database.ExecuteSqlRaw("CREATE TRIGGER Proveedores_RowVersion_Update AFTER UPDATE ON Proveedores BEGIN UPDATE Proveedores SET RowVersion = randomblob(8) WHERE Id = NEW.Id; END;");
+        }
+
         /// <summary>Saves an Admin (hash "hash") and returns its id.</summary>
         public static Guid CrearAdmin(AppDbContext context, string username = "admin")
         {

@@ -1,0 +1,40 @@
+<h2 mat-dialog-title>{{ data.titulo }}</h2>
+
+<form [formGroup]="form" (ngSubmit)="confirmar()">
+  <mat-dialog-content>
+    <div class="content">
+      @if (data.mensaje) {
+        <p class="mensaje">{{ data.mensaje }}</p>
+      }
+
+      @if (data.nombre; as n) {
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>{{ n.etiqueta }}</mat-label>
+          <input matInput type="text" formControlName="nombre" [maxlength]="nombreMax" />
+          @if (form.controls.nombre.touched && form.controls.nombre.invalid) {
+            <mat-error>Ingresá un nombre (máximo {{ nombreMax }} caracteres).</mat-error>
+          }
+        </mat-form-field>
+      }
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Motivo</mat-label>
+        <textarea matInput rows="3" formControlName="motivo" [maxlength]="motivoMax" cdkFocusInitial></textarea>
+        @if (form.controls.motivo.touched && form.controls.motivo.invalid) {
+          <mat-error>Escribí el motivo (mínimo {{ motivoMin }} caracteres). Queda en el historial.</mat-error>
+        }
+      </mat-form-field>
+
+      @if (saveError()) {
+        <p class="form-error" role="alert">{{ saveError() }}</p>
+      }
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" mat-dialog-close>Cancelar</button>
+    <button mat-flat-button type="submit" [class.peligro]="data.peligro" [disabled]="saving()">
+      {{ saving() ? 'Guardando...' : data.confirmar }}
+    </button>
+  </mat-dialog-actions>
+</form>

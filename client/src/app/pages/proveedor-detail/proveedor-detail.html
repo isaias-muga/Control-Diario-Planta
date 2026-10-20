@@ -11,10 +11,17 @@
   <p class="form-error" role="alert">{{ error() }}</p>
 } @else if (proveedor(); as p) {
   <div class="page-header">
-    <h2>{{ p.nombre }}</h2>
-    @if (auth.puedeRegistrar()) {
-      <a mat-flat-button routerLink="/recepciones/carga" [queryParams]="{ proveedor: p.id }">Registrar recepción</a>
-    }
+    <h2>{{ p.nombre }}@if (!p.activo) {&ngsp;<span class="inactivo">(inactivo)</span>}</h2>
+    <div class="acciones">
+      @if (auth.esAdmin()) {
+        <button mat-stroked-button type="button" (click)="corregirNombre(p)">Corregir nombre</button>
+        <button mat-stroked-button type="button" (click)="cambiarEstado(p)">{{ p.activo ? 'Desactivar' : 'Reactivar' }}</button>
+      }
+      <button mat-stroked-button type="button" (click)="verHistorial(p)">Historial</button>
+      @if (auth.puedeRegistrar() && p.activo) {
+        <a mat-flat-button routerLink="/recepciones/carga" [queryParams]="{ proveedor: p.id }">Registrar recepción</a>
+      }
+    </div>
   </div>
 
   <h3>Recepciones</h3>

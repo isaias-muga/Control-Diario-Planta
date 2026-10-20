@@ -32,6 +32,23 @@ namespace DairyControl.ArchitectureTests
         }
 
         [Fact]
+        public void NoAction_IsAnHttpDelete_DataIsCorrectedVoidedOrDeactivatedNeverDeleted()
+        {
+            // Arrange
+            var acciones = Controladores().SelectMany(c => Acciones(c).Select(m => (Controlador: c, Accion: m))).ToList();
+
+            // Act: a controller action that answers DELETE would be a way to remove a recepción, a proveedor or a user for good
+            var deletes = acciones
+                .Where(x => x.Accion.GetCustomAttributes().OfType<HttpMethodAttribute>().Any(a => a.HttpMethods.Contains("DELETE", StringComparer.OrdinalIgnoreCase)))
+                .Select(x => $"{x.Controlador.Name}.{x.Accion.Name}")
+                .ToList();
+
+            // Assert
+            Assert.True(acciones.Count >= 15, "Expected the controller actions, found " + acciones.Count);
+            Assert.True(deletes.Count == 0, "No DELETE endpoints (correct, void or deactivate instead): " + string.Join(", ", deletes));
+        }
+
+        [Fact]
         public void EveryAction_NamesAnExplicitPolicyOrIsAnonymous()
         {
             // Arrange

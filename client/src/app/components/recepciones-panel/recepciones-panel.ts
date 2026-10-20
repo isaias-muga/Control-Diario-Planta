@@ -82,6 +82,7 @@ export class RecepcionesPanel {
       proveedorId: this.proveedorFijo() ?? (p.get('proveedor') || null),
       ticket: ticket && /^\d+$/.test(ticket) ? Number(ticket) : null,
       soloFueraDeRango: p.get('fuera') === '1',
+      incluirAnuladas: p.get('anuladas') === '1',
     };
   });
 
@@ -99,6 +100,9 @@ export class RecepcionesPanel {
 
   /** Proveedores offered by the selector; null when the proveedor is fixed. */
   protected proveedoresParaSelector = computed(() => (this.proveedorFijo() ? null : this.proveedores()));
+
+  /** Voided recepciones shown in the list (when asked for): they are rows, but they never count in the totals. */
+  protected anuladasMostradas = computed(() => this.items().filter((r) => r.anulada).length);
 
   protected litrosPorAgua = computed(() => {
     const t = this.totales();
@@ -157,6 +161,7 @@ export class RecepcionesPanel {
         proveedor: this.proveedorFijo() ? null : filtro.proveedorId || null,
         ticket: filtro.ticket ?? null,
         fuera: filtro.soloFueraDeRango ? '1' : null,
+        anuladas: filtro.incluirAnuladas ? '1' : null,
       },
       replaceUrl: true,
     });

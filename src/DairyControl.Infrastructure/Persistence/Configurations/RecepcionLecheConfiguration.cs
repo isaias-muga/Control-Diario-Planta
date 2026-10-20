@@ -26,6 +26,15 @@ namespace DairyControl.Infrastructure.Persistence.Configurations
                 .HasForeignKey(r => r.OperarioId)
                 .OnDelete(DeleteBehavior.Restrict);
             builder.Property(r => r.RegistradoEn);
+            // Void: final, with a reason; who and when are audit data. A voided recepción stays in the table and keeps its ticket used.
+            builder.Property(r => r.AnuladaEn);
+            builder.Property(r => r.MotivoAnulacion).HasMaxLength(MotivoDeCambio.MaxLength);
+            builder.HasOne<Usuario>()
+                .WithMany()
+                .HasForeignKey(r => r.AnuladaPorUsuarioId)
+                .OnDelete(DeleteBehavior.Restrict);
+            // Concurrency token as a shadow property (the entity does not know about it): a stale correction is refused (409)
+            builder.Property<byte[]>("RowVersion").IsRowVersion();
             builder.OwnsOne(r => r.Parametros, p =>
             {
                 p.Property(x => x.Grasa).HasPrecision(ParametrosCalidad.Precision, ParametrosCalidad.Scale);

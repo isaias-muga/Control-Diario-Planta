@@ -1,0 +1,212 @@
+@if (notFound()) {
+  <p class="state-message">Recepción no encontrada.</p>
+  <a mat-button routerLink="/recepciones">← Volver a Recepciones</a>
+} @else if (errorCarga()) {
+  <p class="form-error" role="alert">{{ errorCarga() }}</p>
+  <a mat-button routerLink="/recepciones">← Volver a Recepciones</a>
+} @else if (!cargado()) {
+  <p class="state-message" aria-busy="true">Cargando la recepción…</p>
+} @else if (detalle(); as d) {
+  @switch (paso()) {
+    @case ('editar') {
+      <form class="pantalla" [formGroup]="form" (ngSubmit)="continuar()" novalidate>
+        <a mat-button class="volver" routerLink="/recepciones">← Volver a Recepciones</a>
+        <header class="barra">
+          <h2 #titulo tabindex="-1">Corregir recepción</h2>
+          <p class="subtitulo">Ticket {{ d.ticket ?? '—' }} · {{ d.proveedorNombre }}</p>
+        </header>
+
+        <div class="cuerpo">
+          @if (d.anulada) {
+            <p class="error" role="alert">Esta recepción está anulada: no se puede corregir.</p>
+          }
+          @if (errorEditar()) {
+            <p class="error" role="alert">{{ errorEditar() }}</p>
+          }
+
+          <mat-form-field appearance="outline">
+            <mat-label>Proveedor</mat-label>
+            <mat-select id="proveedorId" formControlName="proveedorId">
+              @for (p of proveedoresOfrecidos(); track p.id) {
+                <mat-option [value]="p.id">{{ p.nombre }}@if (!p.activo) { (inactivo)}</mat-option>
+              }
+            </mat-select>
+            @if (invalid('proveedorId')) {
+              <mat-error>Elegí un proveedor.</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Fecha y hora</mat-label>
+            <input matInput id="fechaHora" type="datetime-local" formControlName="fechaHora" [min]="fechaMin" />
+            @if (invalid('fechaHora')) {
+              <mat-error>
+                @if (form.controls.fechaHora.hasError('fechaMax')) {
+                  La fecha y hora no puede superar la hora actual en más de 1 hora.
+                } @else if (form.controls.fechaHora.hasError('fechaMin')) {
+                  La fecha y hora no puede ser anterior al 01/01/2000.
+                } @else {
+                  Ingresá la fecha y la hora.
+                }
+              </mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Litros</mat-label>
+            <input matInput appNumero id="litros" formControlName="litros" />
+            @if (invalid('litros')) {
+              <mat-error>{{ errorNumero(form.controls.litros, 'Requerido, entre 0,001 y 30.000.') }}</mat-error>
+            }
+          </mat-form-field>
+
+          <div class="par">
+            <mat-form-field appearance="outline">
+              <mat-label>Grasa (%) (opcional)</mat-label>
+              <input matInput appNumero id="grasa" formControlName="grasa" />
+              @if (invalid('grasa')) {
+                <mat-error>{{ errorNumero(form.controls.grasa, 'Entre 1 y 10 %.') }}</mat-error>
+              }
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Acidez (°D)</mat-label>
+              <input matInput appNumero id="acidez" formControlName="acidez" />
+              @if (invalid('acidez')) {
+                <mat-error>{{ errorNumero(form.controls.acidez, 'Requerido, entre 10 y 30 °D.') }}</mat-error>
+              }
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Temp. (°C)</mat-label>
+              <input matInput appNumero id="temperatura" formControlName="temperatura" />
+              @if (invalid('temperatura')) {
+                <mat-error>{{ errorNumero(form.controls.temperatura, 'Requerido, entre 0 y 45 °C.') }}</mat-error>
+              }
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Agua (%) (opcional)</mat-label>
+              <input matInput appNumero id="aguaPorcentaje" formControlName="aguaPorcentaje" />
+              @if (invalid('aguaPorcentaje')) {
+                <mat-error>{{ errorNumero(form.controls.aguaPorcentaje, 'Entre 0 y 100.') }}</mat-error>
+              }
+            </mat-form-field>
+          </div>
+
+          <div class="silo" role="group" aria-labelledby="etiqueta-silo">
+            <span id="etiqueta-silo" class="etiqueta-silo">Silo <span aria-hidden="true">*</span></span>
+            <div class="silos" role="radiogroup" aria-labelledby="etiqueta-silo">
+              @for (n of silos(); track n) {
+                <button
+                  type="button"
+                  class="silo-boton"
+                  role="radio"
+                  [attr.aria-checked]="form.controls.silo.value === n"
+                  [class.elegido]="form.controls.silo.value === n"
+                  (click)="elegirSilo(n)"
+                >
+                  {{ n }}
+                </button>
+              }
+            </div>
+            @if (invalid('silo')) {
+              <p class="error-silo" role="alert">Elegí el silo.</p>
+            }
+          </div>
+
+          <mat-form-field appearance="outline">
+            <mat-label>{{ d.ticket != null ? 'Ticket' : 'Ticket (opcional)' }}</mat-label>
+            <input matInput appNumero="entero" id="ticket" formControlName="ticket" (input)="errorEditar.set(null)" />
+            @if (invalid('ticket')) {
+              <mat-error>{{ errorNumero(form.controls.ticket, 'Requerido. Entero entre 1 y 2.147.483.647.') }}</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Observaciones (opcional)</mat-label>
+            <textarea matInput id="observaciones" rows="3" formControlName="observaciones" [maxlength]="observacionesMaxLength"></textarea>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Motivo de la corrección</mat-label>
+            <textarea matInput id="motivo" rows="2" [formControl]="motivo" [maxlength]="motivoMaxLength"></textarea>
+            @if (motivo.touched && motivo.invalid) {
+              <mat-error>Escribí el motivo (mínimo {{ motivoMinLength }} caracteres). Queda en el historial.</mat-error>
+            }
+          </mat-form-field>
+        </div>
+
+        <div class="acciones">
+          <button mat-flat-button type="submit" class="boton" [disabled]="d.anulada">Revisar cambios</button>
+        </div>
+      </form>
+    }
+
+    @case ('confirmar') {
+      <section class="pantalla confirmar" aria-labelledby="titulo-confirmar">
+        <div class="cuerpo">
+          <h2 #titulo id="titulo-confirmar" class="titulo" tabindex="-1">¿Corregir esta recepción?</h2>
+          <p class="contexto">Ticket {{ d.ticket ?? '—' }} · {{ d.proveedorNombre }}. Los valores anteriores quedan en el historial.</p>
+
+          <dl class="tarjeta">
+            @for (c of cambios(); track c.campo) {
+              <div class="fila">
+                <dt>{{ etiqueta(c.campo) }}</dt>
+                <dd>
+                  <span class="anterior">{{ c.anterior }}</span>&ngsp;
+                  <span aria-label="pasa a">→</span>&ngsp;
+                  <span class="nuevo">{{ c.nuevo }}</span>
+                </dd>
+              </div>
+            }
+            <div class="fila motivo">
+              <dt>Motivo</dt>
+              <dd class="texto-motivo">{{ motivo.value.trim() }}</dd>
+            </div>
+          </dl>
+
+          @if (fallo(); as f) {
+            <div class="aviso-fallo" role="alert">
+              <strong>No se pudo guardar.</strong>
+              <p>{{ f.mensaje }}</p>
+            </div>
+          }
+        </div>
+
+        <div class="acciones">
+          @if (!fallo() || fallo()!.puedeReintentar) {
+            <button mat-flat-button type="button" class="boton" [disabled]="enviando()" (click)="enviar()">
+              {{ enviando() ? 'Guardando...' : fallo() ? 'Reintentar' : 'Confirmar' }}
+            </button>
+          }
+          <button mat-stroked-button type="button" class="boton" [disabled]="enviando()" (click)="volverAEditar()">Corregir</button>
+        </div>
+      </section>
+    }
+
+    @case ('listo') {
+      <section class="pantalla" aria-labelledby="titulo-listo">
+        <div class="cuerpo centro">
+          <h2 #titulo id="titulo-listo" class="titulo-verde" tabindex="-1">Recepción corregida</h2>
+          <p class="contexto">Los valores anteriores quedaron en el historial.</p>
+          <dl class="tarjeta">
+            @for (c of corregidos(); track c.campo) {
+              <div class="fila">
+                <dt>{{ etiqueta(c.campo) }}</dt>
+                <dd>
+                  <span class="anterior">{{ c.anterior }}</span>&ngsp;
+                  <span aria-label="pasa a">→</span>&ngsp;
+                  <span class="nuevo">{{ c.nuevo }}</span>
+                </dd>
+              </div>
+            }
+          </dl>
+        </div>
+        <div class="acciones">
+          <a mat-flat-button class="boton" routerLink="/recepciones">Volver a Recepciones</a>
+        </div>
+      </section>
+    }
+  }
+}

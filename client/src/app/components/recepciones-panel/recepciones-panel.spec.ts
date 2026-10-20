@@ -9,6 +9,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { ListadoRecepciones, RecepcionListado, TotalesListado } from '../../models/recepcion-listado';
 import { hoyEnPlanta, rangoDeAtajo } from '../../utils/periodos';
+import { RecepcionesList } from '../recepciones-list/recepciones-list';
 import { RecepcionesFiltros } from '../recepciones-filtros/recepciones-filtros';
 import { RecepcionesPanel } from './recepciones-panel';
 
@@ -38,6 +39,11 @@ const recepcion = (cambios: Partial<RecepcionListado>): RecepcionListado => ({
   silo: 1,
   observaciones: null,
   registradoPor: null,
+  anulada: false,
+  motivoAnulacion: null,
+  anuladaPor: null,
+  anuladaEn: null,
+  cantidadCorrecciones: 0,
   motivos: [],
   ...cambios,
 });
@@ -124,6 +130,17 @@ describe('RecepcionesPanel', () => {
       expect(req.request.params.has('ticket')).toBe(false);
       expect(req.request.params.has('soloFueraDeRango')).toBe(false);
       expect(req.request.params.has('pagina')).toBe(false);
+      req.flush(listado());
+    });
+
+    it('sends incluirAnuladas when the URL says anuladas=1, and not otherwise', async () => {
+      await abrir('/?desde=2026-10-01&hasta=2026-10-15&anuladas=1');
+      http.expectOne((r) => r.url.endsWith('/Configuracion/calidad')).flush(LIMITES);
+      http.expectOne((r) => r.url.endsWith('/Proveedores')).flush([]);
+
+      const req = pedidoListado();
+
+      expect(req.request.params.get('incluirAnuladas')).toBe('true');
       req.flush(listado());
     });
 
@@ -225,6 +242,66 @@ describe('RecepcionesPanel', () => {
       const req = pedidoListado();
       expect(req.request.params.get('soloFueraDeRango')).toBe('true');
       req.flush(listado());
+    });
+
+    it('counts only the recepciones that count and says how many voided ones are shown, and still shows the list when all of them are voided', async () => {
+      await abrir('/?anuladas=1');
+      await cargar();
+
+      // cargar() answered the first request; this is a second load with voided rows only
+      filtros().cambio.emit({ desde: '2026-10-14', hasta: '2026-10-14', proveedorId: null, ticket: null, soloFueraDeRango: false, incluirAnuladas: true });
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+      pedidoListado().flush(
+        listado({
+          items: [recepcion({ id: 'a' }), recepcion({ id: 'b', anulada: true }), recepcion({ id: 'c', anulada: true })],
+          totales: totales({ cantidadRecepciones: 1 }),
+        }),
+      );
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+
+      expect(texto('.pie')).toContain('1 de 1 recepciones · 2 anuladas (no suma)');
+    });
+
+    it('shows the list, not "No hay recepciones", when the only rows are voided ones', async () => {
+      await abrir('/?anuladas=1');
+      await cargar();
+
+      filtros().cambio.emit({ desde: '2026-10-14', hasta: '2026-10-14', proveedorId: null, ticket: null, soloFueraDeRango: false, incluirAnuladas: true });
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+      pedidoListado().flush(listado({ items: [recepcion({ id: 'z', anulada: true })], totales: totales({ cantidadRecepciones: 0, litros: 0, litrosReales: 0, ticketMinimo: null, ticketMaximo: null, cantidadFueraDeRango: 0 }) }));
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+
+      expect(harness.routeNativeElement?.textContent).not.toContain('No hay recepciones con estos filtros.');
+      expect(texto('.pie')).toContain('0 de 0 recepciones · 1 anulada (no suma)');
+    });
+
+    it('writes "Incluir anuladas" to the URL and asks for the voided ones', async () => {
+      await abrir('/');
+      await cargar();
+
+      filtros().cambio.emit({ desde: '2026-10-14', hasta: '2026-10-14', proveedorId: null, ticket: null, soloFueraDeRango: false, incluirAnuladas: true });
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+
+      expect(TestBed.inject(Router).url).toContain('anuladas=1');
+      const req = pedidoListado();
+      expect(req.request.params.get('incluirAnuladas')).toBe('true');
+      req.flush(listado());
+    });
+
+    it('reloads the list, without the spinner, when a recepción was voided from a row', async () => {
+      await abrir('/');
+      await cargar();
+
+      (harness.fixture.debugElement.query(By.directive(RecepcionesList)).componentInstance as RecepcionesList).cambio.emit();
+
+      const req = pedidoListado();
+      expect(req.request.params.get('pagina') ?? '1').toBe('1');
+      req.flush(listado({ items: [] }));
     });
 
     it('keeps the URL free of filters that are off', async () => {

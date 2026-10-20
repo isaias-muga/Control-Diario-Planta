@@ -32,8 +32,8 @@ const vacio: ListadoRecepciones = {
 };
 
 const proveedores: Proveedor[] = [
-  { id: 'otro', nombre: 'Tambo Otro', cantidadRecepciones: 1 },
-  { id: 'test-id', nombre: 'Tambo Test', cantidadRecepciones: 3 },
+  { id: 'otro', nombre: 'Tambo Otro', cantidadRecepciones: 1, activo: true },
+  { id: 'test-id', nombre: 'Tambo Test', cantidadRecepciones: 3, activo: true },
 ];
 
 describe('ProveedorDetail', () => {

@@ -9,6 +9,9 @@ namespace DairyControl.Application.DTOs
         public Guid? ProveedorId { get; set; }
         public int? Ticket { get; set; }
         public bool SoloFueraDeRango { get; set; }
+
+        /// <summary>Lists the voided recepciones too (flagged); the totals and subtotals still leave them out.</summary>
+        public bool IncluirAnuladas { get; set; }
         public int Pagina { get; set; } = 1;
     }
 }

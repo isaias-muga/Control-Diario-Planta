@@ -11,10 +11,12 @@ namespace DairyControl.Api.Controllers
     public class ProveedoresController : ControllerBase
     {
         private readonly ProveedorAppService _service;
+        private readonly ProveedorCambiosAppService _cambios;
 
-        public ProveedoresController(ProveedorAppService service)
+        public ProveedoresController(ProveedorAppService service, ProveedorCambiosAppService cambios)
         {
             _service = service;
+            _cambios = cambios;
         }
 
         [HttpPost]
@@ -51,6 +53,38 @@ namespace DairyControl.Api.Controllers
                 return NotFound();
             }
             return Ok(proveedor);
+        }
+
+        // Correct the name, with a reason (the old name stays in the history)
+        [HttpPut("{id}")]
+        [Authorize(Policy = Politicas.Administracion)]
+        public async Task<ActionResult<ProveedorDto>> RenombrarAsync(Guid id, [FromBody] RenombrarProveedorDto dto)
+        {
+            var proveedor = await _cambios.RenombrarAsync(id, dto);
+            return proveedor is null ? NotFound() : Ok(proveedor);
+        }
+
+        // A proveedor is never deleted: it is deactivated (not offered for new recepciones, all history kept) and can be reactivated
+        [HttpPost("{id}/desactivar")]
+        [Authorize(Policy = Politicas.Administracion)]
+        public async Task<IActionResult> DesactivarAsync(Guid id, [FromBody] MotivoCambioDto dto)
+        {
+            return await _cambios.DesactivarAsync(id, dto) ? NoContent() : NotFound();
+        }
+
+        [HttpPost("{id}/reactivar")]
+        [Authorize(Policy = Politicas.Administracion)]
+        public async Task<IActionResult> ReactivarAsync(Guid id, [FromBody] MotivoCambioDto dto)
+        {
+            return await _cambios.ReactivarAsync(id, dto) ? NoContent() : NotFound();
+        }
+
+        [HttpGet("{id}/historial")]
+        [Authorize(Policy = Politicas.Lectura)]
+        public async Task<ActionResult<IEnumerable<CorreccionDto>>> GetHistorialAsync(Guid id)
+        {
+            var historial = await _cambios.GetHistorialAsync(id);
+            return historial is null ? NotFound() : Ok(historial);
         }
 
         [HttpPost("{id}/recepciones")]

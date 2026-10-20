@@ -111,18 +111,27 @@ namespace DairyControl.Infrastructure.Persistence.Queries
             // Compiled once for the page, not once per row
             var motivosDe = MotivosDe(limites);
 
-            var recepciones = RecepcionesListado(filtro.Desde, filtro.Hasta, filtro.ProveedorId);
-            if (filtro.Ticket is int ticket)
+            IQueryable<FilaListado> Filtrar(bool incluirAnuladas)
             {
-                recepciones = recepciones.Where(x => x.Ticket == ticket);
-            }
-            if (filtro.SoloFueraDeRango)
-            {
-                recepciones = recepciones.Where(fueraDeRango);
+                var consulta = RecepcionesListado(filtro.Desde, filtro.Hasta, filtro.ProveedorId, incluirAnuladas);
+                if (filtro.Ticket is int ticket)
+                {
+                    consulta = consulta.Where(x => x.Ticket == ticket);
+                }
+                if (filtro.SoloFueraDeRango)
+                {
+                    consulta = consulta.Where(fueraDeRango);
+                }
+                return consulta;
             }
 
+            // The rows of the page may include the voided ones (when asked); everything that adds up (totals, subtotals, counts)
+            // is computed over the recepciones that count, never over the voided ones.
+            var visibles = Filtrar(filtro.IncluirAnuladas);
+            var recepciones = Filtrar(false);
+
             // One extra row tells whether there is a next page, without a separate count.
-            var filas = await recepciones
+            var filas = await visibles
                 .OrderByDescending(x => x.FechaHora)
                 .ThenByDescending(x => x.Ticket)
                 .ThenByDescending(x => x.Id) // total order: equal time and ticket (or no ticket) must not shuffle between pages
@@ -134,7 +143,10 @@ namespace DairyControl.Infrastructure.Persistence.Queries
             {
                 filas.RemoveAt(filas.Count - 1);
             }
-            var quienCargo = await QuienCargoAsync(filas.Select(f => f.Id).ToList());
+            var ids = filas.Select(f => f.Id).ToList();
+            var quienCargo = await QuienCargoAsync(ids);
+            var correcciones = await CorreccionesAsync(ids);
+            var anuladoras = await NombresDeUsuariosAsync(filas.Where(f => f.AnuladaPorUsuarioId != null).Select(f => f.AnuladaPorUsuarioId!.Value).Distinct().ToList());
 
             var totales = await recepciones
                 .GroupBy(x => 1)
@@ -159,6 +171,8 @@ namespace DairyControl.Infrastructure.Persistence.Queries
                 {
                     var item = AItem(f, motivosDe);
                     item.RegistradoPor = quienCargo.GetValueOrDefault(f.Id);
+                    item.CantidadCorrecciones = correcciones.GetValueOrDefault(f.Id);
+                    item.AnuladaPor = f.AnuladaPorUsuarioId is Guid anuladaPor ? anuladoras.GetValueOrDefault(anuladaPor) : null;
                     return item;
                 }).ToList(),
                 Totales = totales,
@@ -247,6 +261,30 @@ namespace DairyControl.Infrastructure.Persistence.Queries
             return resultado;
         }
 
+        // How many corrections each recepción of the page has had (a correction counts once, whatever number of fields it changed;
+        // the void is not a correction).
+        private async Task<Dictionary<Guid, int>> CorreccionesAsync(List<Guid> ids)
+        {
+            if (ids.Count == 0)
+            {
+                return [];
+            }
+            return await _context.HistorialCambios.AsNoTracking()
+                .Where(c => c.Entidad == CambioRegistrado.EntidadRecepcion && c.Campo != CambioRegistrado.Campos.Anulacion && ids.Contains(c.EntidadId))
+                .GroupBy(c => c.EntidadId)
+                .Select(g => new { Id = g.Key, Cantidad = g.Select(x => x.CorreccionId).Distinct().Count() })
+                .ToDictionaryAsync(x => x.Id, x => x.Cantidad);
+        }
+
+        private async Task<Dictionary<Guid, string>> NombresDeUsuariosAsync(List<Guid> ids)
+        {
+            if (ids.Count == 0)
+            {
+                return [];
+            }
+            return await _context.Usuarios.AsNoTracking().Where(u => ids.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Nombre);
+        }
+
         private static RecepcionListadoDto AItem(FilaListado fila, Func<FilaListado, List<string>> motivosDe)
         {
             return new RecepcionListadoDto
@@ -264,6 +302,9 @@ namespace DairyControl.Infrastructure.Persistence.Queries
                 Temperatura = fila.Temperatura,
                 Silo = fila.Silo,
                 Observaciones = fila.Observaciones,
+                Anulada = fila.AnuladaEn != null,
+                MotivoAnulacion = fila.MotivoAnulacion,
+                AnuladaEn = fila.AnuladaEn,
                 Motivos = motivosDe(fila)
             };
         }
@@ -295,13 +336,23 @@ namespace DairyControl.Infrastructure.Persistence.Queries
                 .Select(g => new { Fecha = g.Key, Cantidad = g.Count() })
                 .ToDictionaryAsync(x => x.Fecha, x => x.Cantidad);
 
-            return porDia.Select(d => new SubtotalDiaDto
+            var subtotales = porDia.Select(d => new SubtotalDiaDto
             {
                 Fecha = DateOnly.FromDateTime(d.Fecha),
                 CantidadRecepciones = d.Cantidad,
                 Litros = d.Litros,
                 CantidadFueraDeRango = fueraPorDia.GetValueOrDefault(d.Fecha)
             }).ToList();
+
+            // A day of the page whose rows are all voided has no recepciones that count: it still gets a (zero) subtotal
+            foreach (var fecha in pagina.Select(f => DateOnly.FromDateTime(f.FechaHora)).Distinct())
+            {
+                if (subtotales.All(s => s.Fecha != fecha))
+                {
+                    subtotales.Add(new SubtotalDiaDto { Fecha = fecha });
+                }
+            }
+            return subtotales.OrderByDescending(s => s.Fecha).ToList();
         }
 
         // Flat projection of the owned recepciones (projecting the owned Parametros object does not translate).
@@ -310,7 +361,10 @@ namespace DairyControl.Infrastructure.Persistence.Queries
             var inicio = desde.ToDateTime(TimeOnly.MinValue);
             var fin = hasta.AddDays(1).ToDateTime(TimeOnly.MinValue);
 
+            // Only the recepciones that count: a voided one is in no total and no figure of the Resumen
+            var vigente = RecepcionLeche.Vigente;
             var recepciones = _context.Recepciones.AsNoTracking()
+                .Where(vigente)
                 .Where(r => r.FechaHora >= inicio && r.FechaHora < fin);
             if (proveedorId is Guid id)
             {
@@ -336,13 +390,17 @@ namespace DairyControl.Infrastructure.Persistence.Queries
 
         // The same rows plus what the list shows. A join (SelectMany with a result selector) instead of filtering
         // inside the collection, so the rows can be ordered and paged without an APPLY.
-        private IQueryable<FilaListado> RecepcionesListado(DateOnly desde, DateOnly hasta, Guid? proveedorId)
+        private IQueryable<FilaListado> RecepcionesListado(DateOnly desde, DateOnly hasta, Guid? proveedorId, bool incluirAnuladas)
         {
             var inicio = desde.ToDateTime(TimeOnly.MinValue);
             var fin = hasta.AddDays(1).ToDateTime(TimeOnly.MinValue);
 
             var recepciones = _context.Recepciones.AsNoTracking()
                 .Where(r => r.FechaHora >= inicio && r.FechaHora < fin);
+            if (!incluirAnuladas)
+            {
+                recepciones = recepciones.Where(RecepcionLeche.Vigente);
+            }
             if (proveedorId is Guid id)
             {
                 recepciones = recepciones.Where(r => r.ProveedorId == id);
@@ -359,6 +417,9 @@ namespace DairyControl.Infrastructure.Persistence.Queries
                     Ticket = x.Recepcion.Ticket,
                     Silo = x.Recepcion.Silo,
                     Observaciones = x.Recepcion.Observaciones,
+                    AnuladaEn = x.Recepcion.AnuladaEn,
+                    AnuladaPorUsuarioId = x.Recepcion.AnuladaPorUsuarioId,
+                    MotivoAnulacion = x.Recepcion.MotivoAnulacion,
                     Litros = x.Recepcion.Parametros.Litros,
                     AguaPorcentaje = x.Recepcion.Parametros.AguaPorcentaje,
                     LitrosReales = LitrosAPagarRegla.De(x.Recepcion),
@@ -399,6 +460,9 @@ namespace DairyControl.Infrastructure.Persistence.Queries
             public string? Observaciones { get; set; }
             public decimal? AguaPorcentaje { get; set; }
             public decimal LitrosReales { get; set; }
+            public DateTime? AnuladaEn { get; set; }
+            public Guid? AnuladaPorUsuarioId { get; set; }
+            public string? MotivoAnulacion { get; set; }
         }
     }
 }

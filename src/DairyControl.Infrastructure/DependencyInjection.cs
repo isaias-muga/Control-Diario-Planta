@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<IProveedorQueries, ProveedorQueries>();
         services.AddScoped<IConfiguracionCalidadRepository, ConfiguracionCalidadRepository>();
         services.AddScoped<IRecepcionQueries, RecepcionQueries>();
+        services.AddScoped<IHistorialQueries, HistorialQueries>();
         services.AddScoped<IUsuarioRepository, UsuarioRepository>();
         services.AddScoped<IOperarioRepository, OperarioRepository>();
         services.AddSingleton<IHasherDePassword, PasswordHasherPbkdf2>();

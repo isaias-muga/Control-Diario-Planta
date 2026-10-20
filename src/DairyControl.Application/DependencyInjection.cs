@@ -11,6 +11,8 @@ public static class DependencyInjection
     {
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<ProveedorAppService>();
+        services.AddScoped<ProveedorCambiosAppService>();
+        services.AddScoped<RecepcionAppService>();
         services.AddScoped<ResumenRecepcionesAppService>();
         services.AddScoped<ListadoRecepcionesAppService>();
         services.AddScoped<ConfiguracionCalidadAppService>();

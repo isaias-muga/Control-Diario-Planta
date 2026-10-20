@@ -81,6 +81,7 @@ export class RecepcionesFiltros {
     },
   ]);
   protected soloControl = this.fb.control(false);
+  protected anuladasControl = this.fb.control(false);
   /** The ticket this component last asked for: the URL echoing it back must not overwrite what is typed since. */
   private ticketEmitido: number | null | undefined;
 
@@ -94,6 +95,7 @@ export class RecepcionesFiltros {
       );
       this.proveedorControl.setValue(f.proveedorId ?? this.TODOS, { emitEvent: false });
       this.soloControl.setValue(!!f.soloFueraDeRango, { emitEvent: false });
+      this.anuladasControl.setValue(!!f.incluirAnuladas, { emitEvent: false });
       const ticket = f.ticket != null ? String(f.ticket) : '';
       if (f.ticket !== this.ticketEmitido && this.ticketControl.value.trim() !== ticket) {
         this.ticketControl.setValue(ticket, { emitEvent: false });
@@ -144,6 +146,10 @@ export class RecepcionesFiltros {
 
   protected soloCambiado(): void {
     this.emitir({ soloFueraDeRango: this.soloControl.value });
+  }
+
+  protected anuladasCambiado(): void {
+    this.emitir({ incluirAnuladas: this.anuladasControl.value });
   }
 
   private emitir(cambios: Partial<FiltroRecepciones>): void {

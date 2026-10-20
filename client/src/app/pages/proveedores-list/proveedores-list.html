@@ -18,7 +18,12 @@
       @for (p of proveedores(); track p.id) {
         <a mat-list-item [routerLink]="['/proveedores', p.id]">
           <span matListItemTitle>{{ p.nombre }}</span>
-          <span matListItemLine>({{ p.cantidadRecepciones }} recepciones)</span>
+          <span matListItemLine>
+            ({{ p.cantidadRecepciones }} recepciones)
+            @if (!p.activo) {
+              <span class="inactivo">· inactivo</span>
+            }
+          </span>
         </a>
         @if (!$last) {
           <mat-divider />

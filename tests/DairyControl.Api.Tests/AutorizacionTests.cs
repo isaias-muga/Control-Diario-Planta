@@ -32,6 +32,15 @@ namespace DairyControl.Api.Tests
             ("POST", $"/api/Proveedores/{UnId}/recepciones", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion]),
             ("GET", "/api/Recepciones?desde=2026-10-01&hasta=2026-10-02", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Consulta]),
             ("GET", "/api/Recepciones/resumen?desde=2026-10-01&hasta=2026-10-02", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Consulta]),
+            // Corrections, voids and deactivations: Admin only. Their history is read by everyone who reads. There is no DELETE anywhere.
+            ("GET", $"/api/Recepciones/{UnId}", [RolUsuario.Admin]),
+            ("PUT", $"/api/Recepciones/{UnId}", [RolUsuario.Admin]),
+            ("POST", $"/api/Recepciones/{UnId}/anular", [RolUsuario.Admin]),
+            ("GET", $"/api/Recepciones/{UnId}/historial", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Consulta]),
+            ("PUT", $"/api/Proveedores/{UnId}", [RolUsuario.Admin]),
+            ("POST", $"/api/Proveedores/{UnId}/desactivar", [RolUsuario.Admin]),
+            ("POST", $"/api/Proveedores/{UnId}/reactivar", [RolUsuario.Admin]),
+            ("GET", $"/api/Proveedores/{UnId}/historial", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Consulta]),
             ("GET", "/api/Recepciones/siguiente-ticket", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion, RolUsuario.Consulta]),
             ("GET", "/api/Configuracion/calidad", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion, RolUsuario.Consulta]),
             ("PUT", "/api/Configuracion/calidad", [RolUsuario.Admin]),
@@ -66,13 +75,29 @@ namespace DairyControl.Api.Tests
             metodo + " " + System.Text.RegularExpressions.Regex.Replace(ruta.Split('?')[0].TrimStart('/'), "[0-9a-f]{8}-[0-9a-f-]{27}", "{id}");
 
         [Fact]
+        public void NoEndpoint_AcceptsDelete_AndTheMatrixHasNoDeleteRow()
+        {
+            // Arrange: every endpoint the application really maps
+            var metodos = _fabrica.Services.GetServices<EndpointDataSource>().SelectMany(f => f.Endpoints).OfType<RouteEndpoint>()
+                .Select(e => e.Metadata.GetMetadata<HttpMethodMetadata>())
+                .Where(m => m is not null)
+                .SelectMany(m => m!.HttpMethods)
+                .ToList();
+
+            // Act & Assert: nothing is ever deleted (data is corrected, voided or deactivated), so no route answers DELETE
+            Assert.True(metodos.Count >= 19, "Expected the endpoints, found " + metodos.Count);
+            Assert.DoesNotContain("DELETE", metodos, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(Filas, f => f.Metodo.Equals("DELETE", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
         public void Matrix_CoversEveryEndpointOfTheControllers()
         {
             // Arrange: every controller endpoint the application really maps (the anonymous login is tested apart)
             var mapeados = _fabrica.Services.GetServices<EndpointDataSource>().SelectMany(f => f.Endpoints).OfType<RouteEndpoint>()
                 .Where(e => e.Metadata.GetMetadata<Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor>() is not null)
                 .Where(e => e.Metadata.GetMetadata<IAllowAnonymous>() is null)
-                .SelectMany(e => e.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Select(m => m + " " + e.RoutePattern.RawText))
+                .SelectMany(e => e.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Select(m => m + " " + e.RoutePattern.RawText!.Replace("{id:guid}", "{id}"))) // the route constraint is not part of the shape the matrix uses
                 .ToList();
 
             // Act

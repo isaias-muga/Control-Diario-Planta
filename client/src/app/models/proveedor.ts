@@ -1,7 +1,12 @@
 export interface Proveedor {
   id: string;
   nombre: string;
+  /** Recepciones that count (the voided ones are left out). */
   cantidadRecepciones: number;
+  /** An inactive proveedor is not offered for a new recepción but keeps all its history. */
+  activo: boolean;
+  /** Row version (base64): renaming must send it back. */
+  version?: string | null;
 }
 
 /** What the reception phone needs to choose a proveedor: no counts. */

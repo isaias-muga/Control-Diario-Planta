@@ -1,0 +1,14 @@
+.content {
+  padding-top: 8px;
+}
+
+.mensaje {
+  margin: 0 0 16px;
+  overflow-wrap: anywhere;
+}
+
+/* A change that is hard to undo (void, deactivate) */
+button.peligro {
+  --mat-button-filled-container-color: var(--mat-sys-error);
+  --mat-button-filled-label-text-color: var(--mat-sys-on-error);
+}

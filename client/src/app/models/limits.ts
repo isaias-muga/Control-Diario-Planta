@@ -31,4 +31,6 @@ export const PASSWORD_MIN_LENGTH = 8; // Usuario.PasswordMinLength
 export const PASSWORD_MAX_LENGTH = 128; // Usuario.PasswordMaxLength
 export const USERNAME_MIN_LENGTH = 3; // Usuario.UsernameMinLength
 export const USERNAME_MAX_LENGTH = 50; // Usuario.UsernameMaxLength
+export const MOTIVO_MIN_LENGTH = 5; // MotivoDeCambio.MinLength
+export const MOTIVO_MAX_LENGTH = 500; // MotivoDeCambio.MaxLength
 export const NOMBRE_PERSONA_MAX_LENGTH = 100; // Usuario.NombreMaxLength and Operario.NombreMaxLength

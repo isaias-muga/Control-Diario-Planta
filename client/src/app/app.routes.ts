@@ -46,6 +46,12 @@ export const routes: Routes = [
     canActivate: [carga],
   },
   {
+    path: 'recepciones/:id/corregir',
+    loadComponent: () =>
+      import('./pages/corregir-recepcion/corregir-recepcion').then((m) => m.CorregirRecepcion),
+    canActivate: [soloAdmin], // only the Admin corrects; the API refuses everybody else anyway
+  },
+  {
     path: 'recepciones',
     loadComponent: () => import('./pages/recepciones/recepciones').then((m) => m.Recepciones),
     canActivate: [oficina],

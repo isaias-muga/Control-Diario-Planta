@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<ConfiguracionCalidad> ConfiguracionesCalidad { get; set; }
     public DbSet<Usuario> Usuarios { get; set; }
     public DbSet<Operario> Operarios { get; set; }
+    public DbSet<CambioRegistrado> HistorialCambios { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
