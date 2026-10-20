@@ -25,13 +25,25 @@
 
 .PARAMETER GitHubRepo
   owner/name of the repository that deploys.
+
+.PARAMETER Protegidos
+  The usernames of the owner accounts (protected: no other Admin can deactivate them, change their role or reset their password),
+  comma-separated: letters, digits and . _ - only, no spaces inside a name. The bootstrap admin ("admin") is always included. When it is
+  not given and the secret protected-usernames has to be written, the script asks for it. The names are stored in the secret
+  protected-usernames of cdf-api and read by the API as AdminUser__Protegidos (they are not passwords, but the deploy needs the secret).
+
+.PARAMETER ActualizarProtegidos
+  Writes the protected usernames again even if the secret protected-usernames already exists. Without it an existing secret is left as it
+  is. The API reads the new value the next time it starts (the next deploy does it).
 #>
 [CmdletBinding()]
 param(
     [switch]$DryRun,
     [ValidateSet('Apps', 'ResourceGroup')][string]$DeployRoleScope = 'Apps',
     [ValidateSet('Zone', 'Local', 'Geo')][string]$BackupRedundancy = 'Zone',
-    [string]$GitHubRepo = 'isaias-muga/Control-Diario-Planta'
+    [string]$GitHubRepo = 'isaias-muga/Control-Diario-Planta',
+    [string]$Protegidos = '',
+    [switch]$ActualizarProtegidos
 )
 
 Set-StrictMode -Version Latest
@@ -56,6 +68,9 @@ $SqlAdminUser = 'cdfadmin'
 $DatabaseName = 'ControlDiario'
 $PlaceholderImage = 'mcr.microsoft.com/k8se/quickstart:latest'
 $PlaceholderPort = 80 # the real port (8080) is set by the first deploy, once a real image runs
+$BootstrapUsername = 'admin' # AdminUser:Username of the API (appsettings.json); the account that is always protected
+$ProtectedSecretName = 'protected-usernames' # secret of cdf-api; infra/containerapps/cdf-api.yaml refers to it by this name
+$ProtectedEnvName = 'AdminUser__Protegidos'
 $ProvidersNeeded = @('Microsoft.App', 'Microsoft.OperationalInsights', 'Microsoft.ContainerRegistry', 'Microsoft.Sql', 'Microsoft.ManagedIdentity', 'Microsoft.Consumption')
 
 if ($ResourceGroup -eq $DemoResourceGroup) { throw 'Refusing to run: the production group must never be the demo group.' }
@@ -174,6 +189,40 @@ function Read-AdminPassword {
     }
 }
 
+# The usernames to protect as the text the API reads (AdminUser__Protegidos): the bootstrap admin first, then the others, without repeats
+# (usernames are not case sensitive in the database). Throws on a name the API would never accept, so a typo stops here.
+function ConvertTo-ProtectedList([string]$Text) {
+    $names = New-Object System.Collections.Generic.List[string]
+    $names.Add($BootstrapUsername)
+    foreach ($part in @($Text -split ',')) {
+        $name = $part.Trim()
+        if (-not $name) { continue }
+        if ($name -notmatch '^[A-Za-z0-9._-]{3,50}$') {
+            throw "Not a valid username: '$name'. Use 3 to 50 letters, digits and . _ - (no spaces inside a name), separated by commas."
+        }
+        $repeated = $false
+        foreach ($known in $names) { if ($known -ieq $name) { $repeated = $true } }
+        if (-not $repeated) { $names.Add($name) }
+    }
+    return ($names.ToArray() -join ',')
+}
+
+function Read-ProtectedUsernames {
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        $typed = Read-Host "Protected usernames, comma-separated (letters, digits and . _ - ; '$BootstrapUsername' is always included; leave empty for only '$BootstrapUsername')"
+        try { return (ConvertTo-ProtectedList $typed) }
+        catch { Write-Host $_.Exception.Message -ForegroundColor Yellow }
+    }
+    throw 'No valid list of protected usernames. Nothing more was changed; run the script again.'
+}
+
+# What goes in the secret: the parameter if given, only the bootstrap admin in a dry run (it never asks), else what the owner types
+function Get-ProtectedValue {
+    if ($script:ProtectedFromParameter) { return $script:ProtectedFromParameter }
+    if ($DryRun) { return (ConvertTo-ProtectedList '') }
+    return (Read-ProtectedUsernames)
+}
+
 function Write-TempJson([object]$Data) {
     $path = Join-Path ([System.IO.Path]::GetTempPath()) ("cdf-" + [guid]::NewGuid().ToString('N') + '.json')
     [System.IO.File]::WriteAllText($path, ($Data | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
@@ -288,6 +337,10 @@ $AcrName = "crcontroldiario$suffix"
 $SqlServer = "sql-cdf-prod-$suffix"
 $AcrServer = "$AcrName.azurecr.io"
 $GroupScope = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup"
+
+# -Protegidos is checked now, before anything is changed
+$script:ProtectedFromParameter = ''
+if ($Protegidos) { $script:ProtectedFromParameter = ConvertTo-ProtectedList $Protegidos }
 
 Write-Step 'What this will do'
 Write-Info "Subscription : $($account.name)"
@@ -442,6 +495,10 @@ else {
     $sJwt = New-Secret $jwtKey 'jwt-key=***' 'jwt-key='
     $sPin = New-Secret $pinSecret 'pin-secret=***' 'pin-secret='
     $sAdmin = New-Secret $adminPassword 'admin-password=***' 'admin-password='
+    # Not a password, so it is not masked: the owner sees the names that will be protected
+    $protectedValue = Get-ProtectedValue
+    $protectedArg = "$ProtectedSecretName=$protectedValue"
+    $protectedEnvArg = "$ProtectedEnvName=secretref:$ProtectedSecretName"
 
     Invoke-WithRetry {
         # A retry after a call that half worked must not fail on "already exists"
@@ -450,9 +507,9 @@ else {
             '--image', $PlaceholderImage, '--ingress', 'internal', '--target-port', $PlaceholderPort,
             '--min-replicas', '1', '--max-replicas', '1', '--cpu', '0.25', '--memory', '0.5Gi',
             '--user-assigned', $identityResourceId, '--registry-server', $AcrServer, '--registry-identity', $identityResourceId,
-            '--secrets', $sConnection, $sJwt, $sPin, $sAdmin,
+            '--secrets', $sConnection, $sJwt, $sPin, $sAdmin, $protectedArg,
             '--env-vars', 'ConnectionStrings__Default=secretref:db-connection', 'Jwt__SigningKey=secretref:jwt-key', 'Pin__Secret=secretref:pin-secret',
-            'AdminUser__Password=secretref:admin-password', 'Database__ApplyMigrationsOnStartup=true', 'DemoData__SeedOnStartup=false',
+            'AdminUser__Password=secretref:admin-password', $protectedEnvArg, 'Database__ApplyMigrationsOnStartup=true', 'DemoData__SeedOnStartup=false',
             'DemoData__ResetOnStartup=false', 'HttpsRedirection__Enabled=false', 'Proxy__ForwardLimit=2', 'RateLimit__LoginPorMinuto=30') | Out-Null
     }
 
@@ -461,6 +518,39 @@ else {
     $sConnection = $null; $sJwt = $null; $sPin = $null; $sAdmin = $null; $sqlPassword = $null
     $script:Secrets.Clear()
     [GC]::Collect()
+}
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# The protected (owner) accounts: the secret protected-usernames and the variable of cdf-api that reads it. A new cdf-api already has both
+# (created above); an existing one gets them here, so the script can be run again before the first deploy that needs them.
+# ---------------------------------------------------------------------------------------------------------------------------------
+Write-Step "Protected accounts ($ProtectedEnvName from the secret $ProtectedSecretName)"
+if (-not $apiExists) {
+    Write-Info "$ApiApp was just created with the secret $ProtectedSecretName and the variable $ProtectedEnvName."
+    if ($ActualizarProtegidos) { Write-Info '-ActualizarProtegidos is not needed: the secret was written when the app was created.' }
+}
+else {
+    # Names only (tsv, one per line): a list of none, one or many is read the same way, and no JSON is parsed
+    $secretNames = @((Get-AzValue @('containerapp', 'secret', 'list', '--name', $ApiApp, '--resource-group', $ResourceGroup, '--query', '[].name', '--output', 'tsv')) -split "`r?`n" | ForEach-Object { $_.Trim() })
+    $envNames = @((Get-AzValue @('containerapp', 'show', '--name', $ApiApp, '--resource-group', $ResourceGroup, '--query', 'properties.template.containers[0].env[].name', '--output', 'tsv')) -split "`r?`n" | ForEach-Object { $_.Trim() })
+    $secretWritten = $false
+    if (($secretNames -contains $ProtectedSecretName) -and -not $ActualizarProtegidos) {
+        Write-Info "The secret $ProtectedSecretName already exists: it is left as it is (run with -ActualizarProtegidos to change the names)."
+    }
+    else {
+        $protectedValue = Get-ProtectedValue
+        Write-Info "Protected usernames: $protectedValue"
+        Invoke-Az -CliArgs @('containerapp', 'secret', 'set', '--name', $ApiApp, '--resource-group', $ResourceGroup, '--secrets', "$ProtectedSecretName=$protectedValue") | Out-Null
+        $secretWritten = $true
+    }
+    if ($envNames -contains $ProtectedEnvName) {
+        Write-Info "$ApiApp already reads $ProtectedEnvName."
+        if ($secretWritten) { Write-Info 'The API reads the new names the next time it starts; the next deploy does it.' }
+    }
+    else {
+        # The secret is written first: a variable that refers to a secret that does not exist would keep the app from starting
+        Invoke-Az -CliArgs @('containerapp', 'update', '--name', $ApiApp, '--resource-group', $ResourceGroup, '--set-env-vars', "$ProtectedEnvName=secretref:$ProtectedSecretName") | Out-Null
+    }
 }
 
 if ($clientExists) { Write-Info "$ClientApp already exists." }
@@ -593,6 +683,7 @@ Write-Info "Production address : https://$clientFqdn"
 Write-Info "Resource group     : $ResourceGroup"
 Write-Info "Registry           : $AcrServer"
 Write-Info "SQL server         : $sqlFqdn (database $DatabaseName)"
+Write-Info "Protected accounts : secret $ProtectedSecretName -> $ProtectedEnvName of $ApiApp (change the names with -ActualizarProtegidos)"
 if ($budgetCreated) { Write-Info "Budget             : $BudgetName (USD $BudgetAmountUsd a month)" }
 else { Write-Host '   Budget             : NOT created (see the yellow warning above); run this script again later or create it by hand' -ForegroundColor Yellow }
 Write-Host ''

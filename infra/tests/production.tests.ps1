@@ -69,6 +69,24 @@ $script:StubOutput = "only-subject`n"
 Assert-That ((Get-FederatedCredentialSubject 'app' 'github-main') -ceq 'only-subject') 'a trailing newline is ignored'
 
 # ---------------------------------------------------------------------------------------------------------------------------------
+Write-Host '== ConvertTo-ProtectedList with none, one and many usernames'
+$BootstrapUsername = 'admin'
+. ([scriptblock]::Create((Get-ScriptFunctionText @('ConvertTo-ProtectedList'))))
+function Test-Throws([scriptblock]$Action) { try { & $Action | Out-Null; return $false } catch { return $true } }
+
+Assert-That ((ConvertTo-ProtectedList '') -ceq 'admin') 'none (empty text): only the bootstrap admin'
+Assert-That ((ConvertTo-ProtectedList '   ') -ceq 'admin') 'none (blanks): only the bootstrap admin'
+Assert-That ((ConvertTo-ProtectedList ' , ,') -ceq 'admin') 'none (only separators): only the bootstrap admin'
+Assert-That ((ConvertTo-ProtectedList 'dueno.real') -ceq 'admin,dueno.real') 'one: the bootstrap admin first, then the name'
+Assert-That ((ConvertTo-ProtectedList ' dueno.real , otro-user,mas_1 ') -ceq 'admin,dueno.real,otro-user,mas_1') 'many: spaces around the commas are trimmed, the order is kept'
+Assert-That ((ConvertTo-ProtectedList 'Admin,dueno,DUENO,admin') -ceq 'admin,dueno') 'repeats (any case, the bootstrap admin too) are written once'
+Assert-That (Test-Throws { ConvertTo-ProtectedList 'dueno real' }) 'a space inside a name is refused'
+Assert-That (Test-Throws { ConvertTo-ProtectedList 'due;no' }) 'a symbol outside . _ - is refused'
+Assert-That (Test-Throws { ConvertTo-ProtectedList 'ab' }) 'a name shorter than 3 characters is refused'
+Assert-That (Test-Throws { ConvertTo-ProtectedList ('x' * 51) }) 'a name longer than 50 characters is refused'
+Assert-That (Test-Throws { ConvertTo-ProtectedList 'bueno,mal nombre' }) 'one bad name among good ones refuses the whole list'
+
+# ---------------------------------------------------------------------------------------------------------------------------------
 Write-Host '== No list from az is parsed with ConvertFrom-Json in the script'
 $jsonLines = @(Get-Content $scriptPath | Where-Object { $_ -match 'ConvertFrom-Json' -and $_ -notmatch '^\s*#' })
 Assert-That ($jsonLines.Count -ge 1) "the script uses ConvertFrom-Json ($($jsonLines.Count) lines): each one must read a single object"
@@ -79,9 +97,9 @@ Assert-That ((Get-Content -Raw $scriptPath) -notmatch "@\('lock'|'lock',\s*'(sho
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 Write-Host '== -DryRun against the fake az and gh'
-$mutating = '^(az (extension add|provider register|group create|acr create|monitor log-analytics workspace (create|update)|identity create|role assignment (create|delete)|containerapp (env )?create|sql (server|db)( str-policy| firewall-rule)? (create|update|set)|ad (app|sp) create|ad app federated-credential (create|update)|lock create|rest --method put)|gh (secret|variable) set)'
+$mutating = '^(az (extension add|provider register|group create|acr create|monitor log-analytics workspace (create|update)|identity create|role assignment (create|delete)|containerapp ((env )?create|update|secret set)|sql (server|db)( str-policy| firewall-rule)? (create|update|set)|ad (app|sp) create|ad app federated-credential (create|update)|lock create|rest --method put)|gh (secret|variable) set)'
 
-function Invoke-Script([string]$State, [string]$Offer = '', [switch]$Real, [string]$Locks = '', [switch]$BudgetDenied) {
+function Invoke-Script([string]$State, [string]$Offer = '', [switch]$Real, [string]$Locks = '', [switch]$BudgetDenied, [string]$Protected = '', [string[]]$Stdin = @('SI'), [string[]]$ScriptArgs = @()) {
     $log = Join-Path ([System.IO.Path]::GetTempPath()) ("cdf-fake-" + [guid]::NewGuid().ToString('N') + '.log')
     $oldPath = $env:PATH
     $oldPreference = $ErrorActionPreference
@@ -93,20 +111,22 @@ function Invoke-Script([string]$State, [string]$Offer = '', [switch]$Real, [stri
         $env:CDF_FAKE_OFFER = $Offer
         $env:CDF_FAKE_LOCKS = $Locks
         $env:CDF_FAKE_BUDGET = $(if ($BudgetDenied) { 'denied' } else { '' })
+        $env:CDF_FAKE_PROTECTED = $Protected
         if ($Real) {
-            # Not a dry run: the commands that change things succeed in the fake and are logged; "SI" answers the confirmation
+            # Not a dry run: the commands that change things succeed in the fake and are logged; "SI" answers the confirmation and any
+            # further line of $Stdin answers the next question of the script (for example the protected usernames)
             $env:CDF_FAKE_ALLOW_MUTATION = '1'
-            $output = 'SI' | & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath 2>&1 | ForEach-Object { "$_" }
+            $output = $Stdin | & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath @ScriptArgs 2>&1 | ForEach-Object { "$_" }
         }
         else {
-            $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath -DryRun 2>&1 | ForEach-Object { "$_" }
+            $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath -DryRun @ScriptArgs 2>&1 | ForEach-Object { "$_" }
         }
         $code = $LASTEXITCODE
     }
     finally {
         $ErrorActionPreference = $oldPreference
         $env:PATH = $oldPath
-        Remove-Item Env:CDF_FAKE_STATE, Env:CDF_FAKE_LOG, Env:CDF_FAKE_OFFER, Env:CDF_FAKE_ALLOW_MUTATION, Env:CDF_FAKE_LOCKS, Env:CDF_FAKE_BUDGET -ErrorAction SilentlyContinue
+        Remove-Item Env:CDF_FAKE_STATE, Env:CDF_FAKE_LOG, Env:CDF_FAKE_OFFER, Env:CDF_FAKE_ALLOW_MUTATION, Env:CDF_FAKE_LOCKS, Env:CDF_FAKE_BUDGET, Env:CDF_FAKE_PROTECTED -ErrorAction SilentlyContinue
     }
     $calls = @()
     if (Test-Path $log) { $calls = @(Get-Content $log); Remove-Item $log -Force }
@@ -216,6 +236,90 @@ Assert-That (@(Get-ChildItem ([System.IO.Path]::GetTempPath()) -Filter 'cdf-*.js
 $realStale = Invoke-Script 'stalecredential' -Real
 Assert-That ($realStale.Code -eq 0) "stale credential, real run: exit code 0 (got $($realStale.Code))"
 Assert-That (@($realStale.Calls | Where-Object { $_ -like 'MUTATION az ad app federated-credential update*' }).Count -eq 1) 'stale credential, real run: the credential is updated, not created'
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+Write-Host '== The protected accounts: the secret protected-usernames and the variable AdminUser__Protegidos'
+
+# Fresh environment: the app is created with the secret and the variable in the same call (the dry run shows the call)
+$freshProtected = Invoke-Script 'fresh' -ScriptArgs @('-Protegidos', 'dueno.real,otro-user')
+Assert-SafeDryRun $freshProtected 'fresh state with -Protegidos'
+Assert-That ($freshProtected.Text -match '\[dry run\] az containerapp create --name cdf-api .*protected-usernames=admin,dueno\.real,otro-user') 'fresh state: cdf-api is created with the secret protected-usernames (the bootstrap admin first)'
+Assert-That ($freshProtected.Text -match '\[dry run\] az containerapp create --name cdf-api .*AdminUser__Protegidos=secretref:protected-usernames') 'fresh state: cdf-api is created with AdminUser__Protegidos reading that secret'
+Assert-That ($freshProtected.Text -match 'cdf-api was just created with the secret protected-usernames') 'fresh state: the protected step says the app already has both'
+Assert-That (@($freshProtected.Calls | Where-Object { $_ -like 'az containerapp secret list*' }).Count -eq 0) 'fresh state: there is no app to list the secrets of, and it is not asked'
+Assert-That ($freshProtected.Text -notmatch '\[dry run\] az containerapp (secret set|update)') 'fresh state: no second call to add them'
+$freshDefault = Invoke-Script 'fresh'
+Assert-That ($freshDefault.Text -match '\[dry run\] az containerapp create --name cdf-api .*protected-usernames=admin(\s|$)') 'fresh state, no names given (dry run): only the bootstrap admin is protected'
+
+# Existing app without the secret (the state of the owner when this was written): the script adds both on a rerun
+$missing = Invoke-Script 'failedrun' -ScriptArgs @('-Protegidos', 'dueno.real')
+Assert-SafeDryRun $missing 'existing app without the secret'
+Assert-That (@($missing.Calls | Where-Object { $_ -match '^az containerapp secret list --name cdf-api --resource-group rg-control-diario-prod --query \[\]\.name --output tsv' }).Count -eq 1) 'existing app without the secret: it asks for the names of the secrets (read-only)'
+Assert-That ($missing.Text -match '\[dry run\] az containerapp secret set --name cdf-api --resource-group rg-control-diario-prod --secrets protected-usernames=admin,dueno\.real') 'existing app without the secret: it would write the secret'
+Assert-That ($missing.Text -match '\[dry run\] az containerapp update --name cdf-api --resource-group rg-control-diario-prod --set-env-vars AdminUser__Protegidos=secretref:protected-usernames') 'existing app without the secret: it would add the variable that reads it'
+Assert-That ((Find-CallIndex @($missing.Text -split "`n") 'containerapp secret set') -lt (Find-CallIndex @($missing.Text -split "`n") 'containerapp update')) 'existing app without the secret: the secret is written BEFORE the variable that refers to it'
+Assert-That ($missing.Text -notmatch 'containerapp create') 'existing app without the secret: no app is created'
+Assert-That ($missing.Text -match 'cdf-api already exists: its secrets are left as they are') 'existing app without the secret: the other secrets are left as they are'
+
+# Existing secret kept
+$kept = Invoke-Script 'failedrun' -Protected 'both' -ScriptArgs @('-Protegidos', 'otro.nombre')
+Assert-SafeDryRun $kept 'existing secret and variable'
+Assert-That ($kept.Text -match 'The secret protected-usernames already exists: it is left as it is') 'existing secret: it says it is kept'
+Assert-That ($kept.Text -notmatch '\[dry run\] az containerapp (secret set|update)') 'existing secret and variable: nothing is written, whatever -Protegidos says'
+Assert-That ($kept.Text -match 'cdf-api already reads AdminUser__Protegidos') 'existing secret and variable: the variable is already there'
+
+# Secret there, variable missing (a run that stopped in between): only the variable is added
+$onlySecret = Invoke-Script 'failedrun' -Protected 'secret'
+Assert-SafeDryRun $onlySecret 'secret without the variable'
+Assert-That ($onlySecret.Text -notmatch '\[dry run\] az containerapp secret set') 'secret without the variable: the secret is not written again'
+Assert-That ($onlySecret.Text -match '\[dry run\] az containerapp update .*--set-env-vars AdminUser__Protegidos=secretref:protected-usernames') 'secret without the variable: the variable is added'
+
+# -ActualizarProtegidos writes the secret again
+$update = Invoke-Script 'failedrun' -Protected 'both' -ScriptArgs @('-ActualizarProtegidos', '-Protegidos', 'nuevo.dueno')
+Assert-SafeDryRun $update '-ActualizarProtegidos'
+Assert-That ($update.Text -match '\[dry run\] az containerapp secret set .*--secrets protected-usernames=admin,nuevo\.dueno') '-ActualizarProtegidos: the secret is written again with the new names'
+Assert-That ($update.Text -notmatch '\[dry run\] az containerapp update') '-ActualizarProtegidos: the variable was there, it is not touched'
+Assert-That ($update.Text -match 'reads the new names the next time it starts') '-ActualizarProtegidos: it says when the API reads the new names'
+
+# A name the API would not accept stops the script before anything is changed
+$invalid = Invoke-Script 'failedrun' -Real -ScriptArgs @('-Protegidos', 'dueno real')
+Assert-That ($invalid.Code -ne 0) 'invalid username: the script stops with an error'
+Assert-That ($invalid.Text -match "Not a valid username: 'dueno real'") 'invalid username: the message names it'
+Assert-That (@($invalid.Calls | Where-Object { $_ -like 'MUTATION*' }).Count -eq 0) 'invalid username: nothing was changed'
+
+# Real runs (not -DryRun) against the fake: what is really sent
+$realMissing = Invoke-Script 'failedrun' -Real -Stdin @('SI', ' dueno.real , otro-user ')
+Assert-That ($realMissing.Code -eq 0) "real run, secret missing: exit code 0 (got $($realMissing.Code))"
+if ($realMissing.Code -ne 0) { Write-Host ($realMissing.Text -split "`n" | Select-Object -Last 12 | Out-String) }
+Assert-That (@($realMissing.Calls | Where-Object { $_ -like 'UNHANDLED*' }).Count -eq 0) 'real run, secret missing: no command the fake did not expect'
+Assert-That (@($realMissing.Calls | Where-Object { $_ -ceq 'SECRETSET protected-usernames=admin,dueno.real,otro-user' }).Count -eq 1) 'real run, secret missing: the names typed are written once, with the bootstrap admin first'
+Assert-That (@($realMissing.Calls | Where-Object { $_ -ceq 'ENVSET AdminUser__Protegidos=secretref:protected-usernames' }).Count -eq 1) 'real run, secret missing: the variable is added once'
+Assert-That ((Find-CallIndex $realMissing.Calls '^SECRETSET ') -lt (Find-CallIndex $realMissing.Calls '^ENVSET ')) 'real run, secret missing: the secret is written before the variable'
+Assert-That ($realMissing.Text -notmatch 'Bootstrap admin password') 'real run, secret missing: the admin password is not asked for'
+
+$realEmpty = Invoke-Script 'failedrun' -Real -Stdin @('SI', '')
+Assert-That (@($realEmpty.Calls | Where-Object { $_ -ceq 'SECRETSET protected-usernames=admin' }).Count -eq 1) 'real run, nothing typed: only the bootstrap admin is protected'
+
+$realBadThenGood = Invoke-Script 'failedrun' -Real -Stdin @('SI', 'mal nombre', 'dueno.real')
+Assert-That ($realBadThenGood.Code -eq 0) 'real run, a bad name and then a good list: the script asks again and goes on'
+Assert-That ($realBadThenGood.Text -match "Not a valid username: 'mal nombre'") 'real run, a bad name: it says what is wrong'
+Assert-That (@($realBadThenGood.Calls | Where-Object { $_ -ceq 'SECRETSET protected-usernames=admin,dueno.real' }).Count -eq 1) 'real run, a bad name and then a good list: only the good list is written'
+
+$realKept = Invoke-Script 'failedrun' -Real -Protected 'both'
+Assert-That ($realKept.Code -eq 0) 'real run, secret and variable exist: exit code 0'
+Assert-That (@($realKept.Calls | Where-Object { $_ -like 'SECRETSET*' -or $_ -like 'ENVSET*' }).Count -eq 0) 'real run, secret and variable exist: neither is touched'
+
+$realUpdate = Invoke-Script 'failedrun' -Real -Protected 'both' -Stdin @('SI', 'nuevo.dueno') -ScriptArgs @('-ActualizarProtegidos')
+Assert-That ($realUpdate.Code -eq 0) 'real run -ActualizarProtegidos: exit code 0'
+Assert-That (@($realUpdate.Calls | Where-Object { $_ -ceq 'SECRETSET protected-usernames=admin,nuevo.dueno' }).Count -eq 1) 'real run -ActualizarProtegidos: the new names are written'
+Assert-That (@($realUpdate.Calls | Where-Object { $_ -like 'ENVSET*' }).Count -eq 0) 'real run -ActualizarProtegidos: the variable is not touched'
+
+# The names the script and the deploy agree on
+$yaml = Get-Content -Raw (Join-Path (Split-Path -Parent $here) 'containerapps\cdf-api.yaml')
+$scriptText = Get-Content -Raw $scriptPath
+Assert-That ($yaml -match '(?m)^\s*-\s*name:\s*AdminUser__Protegidos\s*\r?\n\s*secretRef:\s*protected-usernames\s*$') 'cdf-api.yaml reads AdminUser__Protegidos from the secret protected-usernames'
+Assert-That (($scriptText -match "\`$ProtectedSecretName = 'protected-usernames'") -and ($scriptText -match "\`$ProtectedEnvName = 'AdminUser__Protegidos'")) 'production.ps1 uses the same secret and variable names as cdf-api.yaml'
+Assert-That ($scriptText -match "\`$BootstrapUsername = 'admin'") 'production.ps1 protects the bootstrap username of the API (admin)'
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 Write-Host ''
