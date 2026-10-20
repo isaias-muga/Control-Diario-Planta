@@ -351,7 +351,7 @@ test.describe('Admin: users and operarios', () => {
     const headers = await cabecerasAutenticadas(request);
     const usuarios = await (await request.get('/api/Usuarios', { headers })).json();
     const id = usuarios.find((u: { username: string }) => u.username === persona.username).id;
-    expect((await request.post(`/api/Usuarios/${id}/desactivar`, { headers, data: {} })).status()).toBe(204);
+    expect((await request.post(`/api/Usuarios/${id}/desactivar`, { headers, data: { motivo: 'Baja de prueba e2e' } })).status()).toBe(204);
     await page.getByRole('link', { name: 'Proveedores', exact: true }).click();
 
     await expect(page).toHaveURL(/\/login$/);
