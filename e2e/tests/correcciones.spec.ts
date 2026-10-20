@@ -90,6 +90,27 @@ test('correcciones: a ticket that another recepción uses is refused and nothing
   await expect(page.getByRole('button', { name: /Corregida/ })).toHaveCount(0);
 });
 
+test('correcciones: a stale version is refused (409) even when only litros changed, and the second admin does not overwrite the first', async ({ request }) => {
+  const proveedor = await crearProveedorConIdPorApi(request);
+  const { id } = await registrarRecepcionPorApi(request, proveedor.id, { litros: 1000 });
+  const headers = await cabecerasAutenticadas(request);
+  const leida = await (await request.get(`/api/Recepciones/${id}`, { headers })).json();
+  const correccion = (litros: number, version: string) => ({
+    proveedorId: leida.proveedorId, litros, acidez: leida.acidez, temperatura: leida.temperatura, silo: leida.silo, ticket: leida.ticket,
+    fechaHora: leida.fechaHora, observaciones: leida.observaciones, motivo: 'Corrección de prueba', version,
+  });
+
+  const primera = await request.put(`/api/Recepciones/${id}`, { headers, data: correccion(1100, leida.version) });
+  expect(primera.status()).toBe(200);
+  const segunda = await request.put(`/api/Recepciones/${id}`, { headers, data: correccion(1300, leida.version) }); // the version both read
+  expect(segunda.status()).toBe(409);
+
+  expect((await (await request.get(`/api/Recepciones/${id}`, { headers })).json()).litros).toBe(1100);
+  const historial = await (await request.get(`/api/Recepciones/${id}/historial`, { headers })).json();
+  expect(historial).toHaveLength(1);
+  expect(historial[0].cambios[0]).toMatchObject({ campo: 'litros', valorAnterior: '1000', valorNuevo: '1100' });
+});
+
 test('correcciones: a correction needs a reason and a change', async ({ page, request }) => {
   const proveedor = await crearProveedorConIdPorApi(request);
   const { ticket } = await registrarRecepcionPorApi(request, proveedor.id, { litros: 1000 });

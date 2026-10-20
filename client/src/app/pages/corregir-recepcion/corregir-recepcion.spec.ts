@@ -296,9 +296,27 @@ describe('CorregirRecepcion', () => {
       const req = pedidoPut();
       expect(req.request.body).toEqual({
         proveedorId: 'p1', litros: 1250.5, grasa: 3.5, acidez: 18, temperatura: 4, aguaPorcentaje: 1, silo: 1, ticket: 4980,
-        fechaHora: '2026-10-01T06:00', observaciones: 'Primera carga', motivo: 'Error de tipeo en la balanza', version: 'AAAAAAAAAAE=',
+        fechaHora: '2026-10-01T06:00:00', observaciones: 'Primera carga', motivo: 'Error de tipeo en la balanza', version: 'AAAAAAAAAAE=',
       });
       req.flush({ ...DETALLE, litros: 1250.5 });
+    });
+
+    it('keeps the seconds of the date when the user did not change it, and sends the new date when they did', async () => {
+      await abrir({ ...DETALLE, fechaHora: '2026-10-01T06:00:45' });
+      await confirmar({ litros: 1250 });
+      interno().enviar();
+      const sinTocar = pedidoPut();
+      expect(sinTocar.request.body.fechaHora).toBe('2026-10-01T06:00:45');
+      sinTocar.flush(DETALLE);
+      await fixture.whenStable();
+
+      interno().volverAEditar();
+      cambiar({ fechaHora: '2026-10-02T07:30' });
+      interno().continuar();
+      interno().enviar();
+      const tocada = pedidoPut();
+      expect(tocada.request.body.fechaHora).toBe('2026-10-02T07:30');
+      tocada.flush(DETALLE);
     });
 
     it('sends blank observaciones as null', async () => {
@@ -389,6 +407,33 @@ describe('CorregirRecepcion', () => {
       expect(interno().paso()).toBe('confirmar');
       expect(texto()).toContain('No se pudo conectar con el servidor.');
       expect(boton('Reintentar')).toBeTruthy();
+    });
+
+    it('says the first send was probably saved when a retry gets a 400 "no changes" (the recepción already has the new values)', async () => {
+      await abrir();
+      await confirmar();
+      interno().enviar();
+      pedidoPut().error(new ProgressEvent('error'), { status: 0 });
+      fixture.detectChanges();
+
+      interno().enviar();
+      pedidoPut().flush({ error: 'No hay cambios para guardar.', field: 'cambios' }, { status: 400, statusText: 'Bad Request' });
+      fixture.detectChanges();
+
+      expect(interno().paso()).toBe('confirmar');
+      expect(texto()).toContain('Probablemente la corrección ya se guardó');
+      expect(boton('Reintentar')).toBeUndefined();
+    });
+
+    it('does not say that for a 400 "no changes" on a first send: it goes back to the form', async () => {
+      await abrir();
+      await confirmar();
+
+      interno().enviar();
+      pedidoPut().flush({ error: 'No hay cambios para guardar.', field: 'cambios' }, { status: 400, statusText: 'Bad Request' });
+      fixture.detectChanges();
+
+      expect(interno().paso()).toBe('editar');
     });
 
     it('says the first send was probably saved when a retry gets a 409, and offers no more retries', async () => {

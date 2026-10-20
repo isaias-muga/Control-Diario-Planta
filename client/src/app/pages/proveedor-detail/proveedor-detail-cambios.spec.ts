@@ -115,6 +115,23 @@ describe('ProveedorDetail: corrections, deactivation and history', () => {
     req.flush({ ...activo, nombre: 'Tambo Test S.A.' });
   });
 
+  it('reloads the proveedor when the rename is refused because it changed meanwhile, so the next try has the new version', async () => {
+    await abrir('Admin', activo);
+    const { datos } = espiar();
+
+    boton('Corregir nombre').click();
+    datos()!.guardar('Mal escrito', 'Tambo Test S.A.').subscribe({ error: () => {} });
+    http.expectOne((r) => r.url.endsWith('/Proveedores/test-id') && r.method === 'PUT').flush({ error: 'otro' }, { status: 409, statusText: 'Conflict' });
+    // (the mocked dialog also "closes saved", so the page reloads twice here; both answers carry the new version)
+    http.match((r) => r.url.endsWith('/Proveedores/test-id') && r.method === 'GET').filter((r) => !r.cancelled).forEach((r) => r.flush({ ...activo, version: 'NUEVA=' }));
+    http.match((r) => r.url.endsWith('/Recepciones')).forEach((r) => r.flush(vacio));
+    datos()!.guardar('Mal escrito', 'Tambo Test S.A.').subscribe();
+
+    const req = http.expectOne((r) => r.url.endsWith('/Proveedores/test-id') && r.method === 'PUT');
+    expect(req.request.body.version).toBe('NUEVA=');
+    req.flush({ ...activo, nombre: 'Tambo Test S.A.' });
+  });
+
   it('reloads the proveedor and the list after the name was corrected', async () => {
     await abrir('Admin', activo);
     espiar();

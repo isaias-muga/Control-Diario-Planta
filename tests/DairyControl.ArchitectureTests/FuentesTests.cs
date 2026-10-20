@@ -18,6 +18,10 @@ namespace DairyControl.ArchitectureTests
         [GeneratedRegex(@"\bExecuteDelete(Async)?\s*\(|\.RemoveRange\s*\(|\b_context\.\w+\.Remove\s*\(|\b_context\.Remove\s*\(")]
         private static partial Regex BorraFilas();
 
+        // In Infrastructure (the only project that touches the database) any .Remove( is a delete, whatever the context field is called
+        [GeneratedRegex(@"\.Remove\s*\(|\.Set<\w+>\(\)\s*\.Remove")]
+        private static partial Regex RemueveEnInfraestructura();
+
         private static readonly string[] Proyectos =
         [
             "DairyControl.Domain",
@@ -69,6 +73,7 @@ namespace DairyControl.ArchitectureTests
             // Assert: the one exception is the demo reset (DemoData:ResetOnStartup), which wipes synthetic data and the history that
             // describes it. Real data is never deleted.
             Assert.Contains(borrados, b => b.Contains("DemoDataSeeder.cs", StringComparison.Ordinal)); // the scan sees the demo reset: it is not looking at nothing
+            borrados.AddRange(Coincidencias(["DairyControl.Infrastructure"], RemueveEnInfraestructura()));
             var noPermitidos = borrados.Where(b => !b.Contains("DemoDataSeeder.cs", StringComparison.Ordinal)).ToList();
             Assert.True(noPermitidos.Count == 0, "Physical deletes (correct, void or deactivate instead):" + Environment.NewLine + string.Join(Environment.NewLine, noPermitidos));
         }

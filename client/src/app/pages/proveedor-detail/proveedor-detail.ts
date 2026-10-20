@@ -1,7 +1,7 @@
 import { Component, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { Subscription, tap } from 'rxjs';
 import { AuthService } from '../../services/auth';
 import { ProveedoresService } from '../../services/proveedores';
 import { Proveedor } from '../../models/proveedor';
@@ -49,7 +49,12 @@ export class ProveedorDetail {
         mensaje: 'El nombre anterior queda en el historial del proveedor.',
         confirmar: 'Corregir',
         nombre: { etiqueta: 'Nombre', valor: p.nombre },
-        guardar: (motivo, nombre) => this.proveedoresService.renombrar(p.id, nombre ?? p.nombre, motivo, p.version ?? ''),
+        // The version is read when the user confirms; after a refusal (someone else changed it: 409) the proveedor is reloaded, so the
+        // next try carries the current version
+        guardar: (motivo, nombre) =>
+          this.proveedoresService
+            .renombrar(p.id, nombre ?? p.nombre, motivo, this.proveedor()?.version ?? p.version ?? '')
+            .pipe(tap({ error: () => this.load(false) })),
       },
       'Nombre corregido.',
     );

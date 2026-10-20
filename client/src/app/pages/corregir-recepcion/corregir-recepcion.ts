@@ -237,7 +237,8 @@ export class CorregirRecepcion {
         aguaPorcentaje: v.aguaPorcentaje,
         silo: v.silo!,
         ticket: v.ticket,
-        fechaHora: v.fechaHora!,
+        // The field has minutes only: untouched, the date keeps the seconds it has (a correction of another field must not change it)
+        fechaHora: v.fechaHora === d.fechaHora.slice(0, 16) ? d.fechaHora : v.fechaHora!,
         observaciones: v.observaciones?.trim() ? v.observaciones.trim() : null,
         motivo: this.motivo.value.trim(),
         version: d.version,
@@ -261,8 +262,9 @@ export class CorregirRecepcion {
       this.fallo.set({ mensaje, puedeReintentar: true });
       return;
     }
-    if (err.status === 409 && this.reintento) {
-      // A 409 on the retry means the first send was probably saved (the version it read is no longer the current one)
+    if (this.reintento && (err.status === 409 || (err.status === 400 && getApiErrorField(err) === 'cambios'))) {
+      // On the retry, a 409 (the version it read is no longer the current one) or a 400 "no changes" (the recepción already has these
+      // values) mean the first send was probably saved
       this.fallo.set({
         mensaje: 'Probablemente la corrección ya se guardó. Revisá el historial de la recepción en Recepciones antes de volver a intentarlo.',
         puedeReintentar: false,
