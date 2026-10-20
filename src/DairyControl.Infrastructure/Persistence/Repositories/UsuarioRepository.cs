@@ -1,4 +1,6 @@
+using System.Data;
 using DairyControl.Domain.Entities;
+using DairyControl.Domain.Enums;
 using DairyControl.Domain.Exceptions;
 using DairyControl.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -24,9 +26,10 @@ namespace DairyControl.Infrastructure.Persistence.Repositories
         public async Task<IReadOnlyList<Usuario>> GetAllAsync() => await _context.Usuarios.AsNoTracking().ToListAsync();
 
         // The unique index on Username is the last line of defense when two admins create the same user at once.
-        public async Task AddAsync(Usuario usuario)
+        public async Task AddAsync(Usuario usuario, CambioRegistrado cambio)
         {
             _context.Usuarios.Add(usuario);
+            _context.HistorialCambios.Add(cambio);
             try
             {
                 await _context.SaveChangesAsync();
@@ -34,6 +37,7 @@ namespace DairyControl.Infrastructure.Persistence.Repositories
             catch (DbUpdateException ex) when (UnicidadSql.EsViolacion(ex))
             {
                 _context.Entry(usuario).State = EntityState.Detached;
+                _context.Entry(cambio).State = EntityState.Detached;
                 throw new ConflictoDeUnicidadException("Ya existe un usuario con ese nombre de usuario.");
             }
         }
@@ -41,6 +45,48 @@ namespace DairyControl.Infrastructure.Persistence.Repositories
         public async Task UpdateAsync(Usuario usuario)
         {
             await _context.SaveChangesAsync();
+        }
+
+        public async Task GuardarCambioAsync(Usuario usuario, CambioRegistrado cambio, bool exigirOtroAdminActivo)
+        {
+            // The history entry is saved in the same SaveChanges as the change it describes: both or none
+            _context.HistorialCambios.Add(cambio);
+            try
+            {
+                if (!exigirOtroAdminActivo)
+                {
+                    await _context.SaveChangesAsync();
+                    return;
+                }
+                // Serializable: the count and the save cannot be interleaved with another admin's change, so two admins cannot
+                // deactivate or demote each other at the same time and leave nobody (an explicit transaction needs the execution strategy)
+                await _context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+                {
+                    await using var transaccion = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+                    var otrosAdmins = await _context.Usuarios.AsNoTracking()
+                        .CountAsync(u => u.Id != usuario.Id && u.Activo && u.Rol == RolUsuario.Admin);
+                    if (otrosAdmins == 0)
+                    {
+                        throw new ReglaDeNegocioException(Usuario.MensajeUltimoAdmin, "id");
+                    }
+                    // Not accepted yet: if the commit fails and the strategy retries, the tracker must still see the changes as pending
+                    await _context.SaveChangesAsync(acceptAllChangesOnSuccess: false);
+                    await transaccion.CommitAsync();
+                });
+                _context.ChangeTracker.AcceptAllChanges();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // A login attempt (or another admin) saved this row after it was read
+                _context.Entry(cambio).State = EntityState.Detached;
+                throw new ConflictoDeConcurrenciaException("El usuario cambió mientras tanto. Recargá la página y probá de nuevo.");
+            }
+            catch
+            {
+                // Refused (last Admin) or failed: the entry describes a change that did not happen, so a later save must not write it
+                _context.Entry(cambio).State = EntityState.Detached;
+                throw;
+            }
         }
 
         private const int MaxReintentos = 10;

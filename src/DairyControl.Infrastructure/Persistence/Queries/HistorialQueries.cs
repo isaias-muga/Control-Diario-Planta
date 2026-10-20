@@ -20,6 +20,8 @@ namespace DairyControl.Infrastructure.Persistence.Queries
             {
                 CambioRegistrado.EntidadRecepcion => await _context.Recepciones.AsNoTracking().AnyAsync(r => r.Id == id),
                 CambioRegistrado.EntidadProveedor => await _context.Proveedores.AsNoTracking().AnyAsync(p => p.Id == id),
+                CambioRegistrado.EntidadUsuario => await _context.Usuarios.AsNoTracking().AnyAsync(u => u.Id == id),
+                CambioRegistrado.EntidadOperario => await _context.Operarios.AsNoTracking().AnyAsync(o => o.Id == id),
                 _ => false
             };
             if (!existe)

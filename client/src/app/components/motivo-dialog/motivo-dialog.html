@@ -17,6 +17,20 @@
         </mat-form-field>
       }
 
+      @if (data.opcion; as o) {
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>{{ o.etiqueta }}</mat-label>
+          <mat-select formControlName="opcion" required>
+            @for (opcion of o.opciones; track opcion.valor) {
+              <mat-option [value]="opcion.valor">{{ opcion.etiqueta }}</mat-option>
+            }
+          </mat-select>
+          @if (form.controls.opcion.touched && form.controls.opcion.invalid) {
+            <mat-error>Elegí una opción.</mat-error>
+          }
+        </mat-form-field>
+      }
+
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>Motivo</mat-label>
         <textarea matInput rows="3" formControlName="motivo" [maxlength]="motivoMax" cdkFocusInitial></textarea>

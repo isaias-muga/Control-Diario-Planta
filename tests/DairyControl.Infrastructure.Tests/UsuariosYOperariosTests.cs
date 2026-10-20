@@ -204,7 +204,7 @@ namespace DairyControl.Infrastructure.Tests
             using (var escritura = NuevoContexto())
             {
                 var operario = Operario.Crear("Juan", "hash-1234");
-                operario.Desactivar();
+                operario.Desactivar(DairyControl.Domain.ValueObjects.MotivoDeCambio.Create("Baja de prueba"), Guid.NewGuid(), new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc));
                 escritura.Operarios.Add(operario);
                 escritura.SaveChanges();
             }
@@ -236,7 +236,7 @@ namespace DairyControl.Infrastructure.Tests
             // Arrange
             using var context = NuevoContexto();
             var anterior = Operario.Crear("Juan", "hash-1234");
-            anterior.Desactivar();
+            anterior.Desactivar(DairyControl.Domain.ValueObjects.MotivoDeCambio.Create("Baja de prueba"), Guid.NewGuid(), new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc));
             context.Operarios.Add(anterior);
             context.SaveChanges();
 

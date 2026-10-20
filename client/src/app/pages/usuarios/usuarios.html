@@ -21,7 +21,17 @@
       <table mat-table [dataSource]="usuarios()" class="tabla">
         <ng-container matColumnDef="username">
           <th mat-header-cell *matHeaderCellDef aria-label="Usuario">Usuario</th>
-          <td mat-cell *matCellDef="let u" [matTooltip]="u.username">{{ u.username }}</td>
+          <td mat-cell *matCellDef="let u" [matTooltip]="u.username">
+            {{ u.username }}
+            @if (u.protegido) {
+              <span class="insignia-protegida" [matTooltip]="textoCuentaProtegida" [attr.aria-label]="textoCuentaProtegida" tabindex="0">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true" focusable="false">
+                  <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
+                </svg>
+                Protegida
+              </span>
+            }
+          </td>
         </ng-container>
         <ng-container matColumnDef="nombre">
           <th mat-header-cell *matHeaderCellDef aria-label="Nombre">Nombre</th>
@@ -47,11 +57,17 @@
           <th mat-header-cell *matHeaderCellDef aria-label="Acciones">Acciones</th>
           <td mat-cell *matCellDef="let u">
             @if (u.activo) {
-              <button mat-button type="button" (click)="restablecerPassword(u)" [attr.aria-label]="'Restablecer la contraseña de ' + u.username">Restablecer contraseña</button>
-              @if (u.id !== auth.id()) {
+              @if (puedeTocar(u)) {
+                <button mat-button type="button" (click)="restablecerPassword(u)" [attr.aria-label]="'Restablecer la contraseña de ' + u.username">Restablecer contraseña</button>
+              }
+              @if (u.id !== auth.id() && !u.protegido) {
+                <button mat-button type="button" (click)="cambiarRol(u)" [attr.aria-label]="'Cambiar el rol de ' + u.username">Cambiar rol</button>
                 <button mat-button type="button" (click)="desactivarUsuario(u)" [attr.aria-label]="'Desactivar a ' + u.username">Desactivar</button>
               }
+            } @else {
+              <button mat-button type="button" (click)="reactivarUsuario(u)" [attr.aria-label]="'Reactivar a ' + u.username">Reactivar</button>
             }
+            <button mat-button type="button" (click)="verHistorialUsuario(u)" [attr.aria-label]="'Ver el historial de ' + u.username">Historial</button>
           </td>
         </ng-container>
 
@@ -92,7 +108,10 @@
             @if (o.activo) {
               <button mat-button type="button" (click)="cambiarPin(o)" [attr.aria-label]="'Cambiar el PIN de ' + o.nombre">Cambiar PIN</button>
               <button mat-button type="button" (click)="desactivarOperario(o)" [attr.aria-label]="'Desactivar a ' + o.nombre">Desactivar</button>
+            } @else {
+              <button mat-button type="button" (click)="reactivarOperario(o)" [attr.aria-label]="'Reactivar a ' + o.nombre">Reactivar</button>
             }
+            <button mat-button type="button" (click)="verHistorialOperario(o)" [attr.aria-label]="'Ver el historial de ' + o.nombre">Historial</button>
           </td>
         </ng-container>
 

@@ -78,16 +78,50 @@ namespace DairyControl.ArchitectureTests
             Assert.True(noPermitidos.Count == 0, "Physical deletes (correct, void or deactivate instead):" + Environment.NewLine + string.Join(Environment.NewLine, noPermitidos));
         }
 
+        [GeneratedRegex(@"\.MarcarProtegido\s*\(")]
+        private static partial Regex MarcaCuentaProtegida();
+
+        [Fact]
+        public void Source_OnlyTheConfigurationSyncSetsTheProtectedFlag()
+        {
+            // Arrange / Act: every place that sets or clears the owner-account flag
+            var llamadas = Coincidencias(Proyectos, MarcaCuentaProtegida());
+
+            // Assert: protection comes only from configuration (the startup sync and the bootstrap admin, both in UsuarioAppService),
+            // never from a controller or another service
+            Assert.Contains(llamadas, l => l.Contains("UsuarioAppService.cs", StringComparison.Ordinal)); // the scan sees the sync: it is not looking at nothing
+            var noPermitidas = llamadas.Where(l => !l.Contains("UsuarioAppService.cs", StringComparison.Ordinal)).ToList();
+            Assert.True(noPermitidas.Count == 0, "Only UsuarioAppService may set the protected flag:" + Environment.NewLine + string.Join(Environment.NewLine, noPermitidas));
+        }
+
         [Fact]
         public void DemoReset_ClearsTheHistoryBeforeTheRecepciones()
         {
             // Arrange / Act: the history has no foreign key to what it describes, so the reset has to clear it by hand
             var fuente = File.ReadAllText(Path.Combine(Proyecto.Raiz, "src", "DairyControl.Infrastructure", "Persistence", "DemoDataSeeder.cs"));
-            var historial = fuente.IndexOf("HistorialCambios.ExecuteDeleteAsync", StringComparison.Ordinal);
+            var historial = fuente.IndexOf("_context.HistorialCambios", StringComparison.Ordinal);
+            var borradoDelHistorial = fuente.IndexOf("ExecuteDeleteAsync", historial, StringComparison.Ordinal);
             var recepciones = fuente.IndexOf("Recepciones.ExecuteDeleteAsync", StringComparison.Ordinal);
 
             // Assert
-            Assert.True(historial >= 0 && recepciones >= 0 && historial < recepciones, "The demo reset must delete the history before the recepciones.");
+            Assert.True(historial >= 0 && borradoDelHistorial >= 0 && recepciones >= 0 && borradoDelHistorial < recepciones,
+                "The demo reset must delete the history before the recepciones.");
+        }
+
+        [Fact]
+        public void DemoReset_KeepsTheHistoryOfUsuariosAndOperarios()
+        {
+            // Arrange / Act: usuarios and operarios are never deleted, so the history that describes them must survive the reset
+            var fuente = File.ReadAllText(Path.Combine(Proyecto.Raiz, "src", "DairyControl.Infrastructure", "Persistence", "DemoDataSeeder.cs"));
+            var historial = fuente.IndexOf("_context.HistorialCambios", StringComparison.Ordinal);
+            var borrado = fuente.IndexOf("ExecuteDeleteAsync", historial, StringComparison.Ordinal);
+            var filtro = fuente.Substring(historial, borrado - historial);
+
+            // Assert
+            Assert.Contains("EntidadRecepcion", filtro);
+            Assert.Contains("EntidadProveedor", filtro);
+            Assert.DoesNotContain("EntidadUsuario", filtro);
+            Assert.DoesNotContain("EntidadOperario", filtro);
         }
 
         [Fact]

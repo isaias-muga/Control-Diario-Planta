@@ -27,7 +27,29 @@ namespace DairyControl.Api.Controllers
 
         [HttpPost("{id}/desactivar")]
         [Authorize(Policy = Politicas.Administracion)]
-        public async Task<IActionResult> DesactivarAsync(Guid id) => await _service.DesactivarAsync(id) ? NoContent() : NotFound();
+        public async Task<IActionResult> DesactivarAsync(Guid id, [FromBody] MotivoCambioDto dto) =>
+            await _service.DesactivarAsync(id, dto) ? NoContent() : NotFound();
+
+        [HttpPost("{id}/reactivar")]
+        [Authorize(Policy = Politicas.Administracion)]
+        public async Task<IActionResult> ReactivarAsync(Guid id, [FromBody] MotivoCambioDto dto) =>
+            await _service.ReactivarAsync(id, dto) ? NoContent() : NotFound();
+
+        [HttpPut("{id}/rol")]
+        [Authorize(Policy = Politicas.Administracion)]
+        public async Task<ActionResult<UsuarioDto>> CambiarRolAsync(Guid id, [FromBody] CambiarRolDto dto)
+        {
+            var usuario = await _service.CambiarRolAsync(id, dto);
+            return usuario is null ? NotFound() : Ok(usuario);
+        }
+
+        [HttpGet("{id}/historial")]
+        [Authorize(Policy = Politicas.Administracion)]
+        public async Task<ActionResult<IEnumerable<CorreccionDto>>> GetHistorialAsync(Guid id)
+        {
+            var historial = await _service.GetHistorialAsync(id);
+            return historial is null ? NotFound() : Ok(historial);
+        }
 
         [HttpPost("{id}/restablecer-password")]
         [Authorize(Policy = Politicas.Administracion)]

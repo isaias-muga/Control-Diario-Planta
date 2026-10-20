@@ -258,6 +258,9 @@ namespace DairyControl.Infrastructure.Migrations
                     b.Property<DateTime?>("PrimerFalloPinUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("Protegido")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Rol")
                         .IsRequired()
                         .HasMaxLength(20)

@@ -36,10 +36,22 @@ namespace DairyControl.Domain.Tests
         public void Crear_UnknownEntity_Throws()
         {
             // Arrange & Act
-            var ex = Assert.Throws<ReglaDeNegocioException>(() => Crear(entidad: "Usuario"));
+            var ex = Assert.Throws<ReglaDeNegocioException>(() => Crear(entidad: "Silo"));
 
             // Assert
             Assert.Equal("entidad", ex.Campo);
+        }
+
+        [Theory]
+        [InlineData(CambioRegistrado.EntidadUsuario)]
+        [InlineData(CambioRegistrado.EntidadOperario)]
+        public void Crear_UsuarioOrOperario_IsAccepted(string entidad)
+        {
+            // Arrange & Act
+            var cambio = Crear(entidad: entidad, campo: CambioRegistrado.Campos.Rol);
+
+            // Assert
+            Assert.Equal(entidad, cambio.Entidad);
         }
 
         [Fact]

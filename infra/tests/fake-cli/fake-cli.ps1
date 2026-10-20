@@ -10,6 +10,9 @@
 # $env:CDF_FAKE_LOCKS is a comma list of the delete locks that already exist (lock-sql-server, lock-sql-db); default none.
 # $env:CDF_FAKE_BUDGET=denied makes every call on the budget answer what Azure answers on a subscription whose Cost Management is not
 # ready yet (RBACAccessDenied), as the owner got right after upgrading to pay-as-you-go.
+# $env:CDF_FAKE_PROTECTED says what cdf-api already has of the protected accounts: none (default: no secret protected-usernames, no
+# variable AdminUser__Protegidos), secret (the secret, not the variable) or both. A secret or variable that is set is logged as
+# SECRETSET name=value / ENVSET name=value.
 # $env:CDF_FAKE_OFFER overrides the subscription offer (default PayAsYouGo_2014-09-01). Every call is appended to $env:CDF_FAKE_LOG.
 # Anything it does not know is logged as UNHANDLED and fails, so a new read-only call in the script cannot go unnoticed.
 [CmdletBinding(PositionalBinding = $false)]
@@ -79,6 +82,27 @@ elseif ($tool -eq 'az') {
         '^containerapp env show .*--query properties\.defaultDomain' { Exists $built 'fake-domain.brazilsouth.azurecontainerapps.io' }
         '^containerapp env show' { Exists $built }
         '^containerapp show .*--name (cdf-api|cdf-client) .*--query id' { Exists $built "$group/providers/Microsoft.App/containerApps/$($Matches[1])" }
+        '^containerapp secret list' {
+            # Names only (tsv, one per line), as the script asks; the secrets that cdf-api has, with protected-usernames when the state says so
+            if ($command -notmatch '--name cdf-api ' -or $command -notmatch '--query \[\]\.name ' -or $command -notmatch '--output tsv') {
+                [Console]::Error.WriteLine('fake-cli: secret list called with the wrong arguments: ' + $command)
+                exit 2
+            }
+            if (-not $built) { NotFound }
+            $names = @('db-connection', 'jwt-key', 'pin-secret', 'admin-password')
+            if (@('secret', 'both') -contains $env:CDF_FAKE_PROTECTED) { $names += 'protected-usernames' }
+            Reply ($names -join "`n")
+        }
+        '^containerapp show .*--name cdf-api .*--query properties\.template\.containers\[0\]\.env\[\]\.name' {
+            if ($command -notmatch '--output tsv') {
+                [Console]::Error.WriteLine('fake-cli: containerapp show called without --output tsv: ' + $command)
+                exit 2
+            }
+            if (-not $built) { NotFound }
+            $names = @('ConnectionStrings__Default', 'Jwt__SigningKey', 'Pin__Secret', 'AdminUser__Password', 'Database__ApplyMigrationsOnStartup')
+            if ($env:CDF_FAKE_PROTECTED -eq 'both') { $names += 'AdminUser__Protegidos' }
+            Reply ($names -join "`n")
+        }
         '^containerapp show .*--query properties\.configuration\.ingress\.fqdn' { Exists $built 'cdf-client.fake-domain.brazilsouth.azurecontainerapps.io' }
         '^containerapp show' { Exists $built }
         '^sql server show .*--query fullyQualifiedDomainName' { Exists $built 'sql-cdf-prod-123456.database.windows.net' }
@@ -101,7 +125,7 @@ elseif ($tool -eq 'az') {
     }
 }
 
-$changes = '^(az (extension add|provider register|group create|acr create|monitor log-analytics workspace (create|update)|identity create|role assignment (create|delete)|containerapp (env )?create|sql (server|db)( str-policy| firewall-rule)? (create|update|set)|ad (app|sp) create|ad app federated-credential (create|update)|lock create|rest --method put)|gh (secret|variable) set)'
+$changes = '^(az (extension add|provider register|group create|acr create|monitor log-analytics workspace (create|update)|identity create|role assignment (create|delete)|containerapp ((env )?create|update|secret set)|sql (server|db)( str-policy| firewall-rule)? (create|update|set)|ad (app|sp) create|ad app federated-credential (create|update)|lock create|rest --method put)|gh (secret|variable) set)'
 if ($env:CDF_FAKE_ALLOW_MUTATION -eq '1' -and "$tool $command" -match $changes) {
     if ($env:CDF_FAKE_BUDGET -eq 'denied' -and $command -match '^rest --method put .*budgets/') {
         Add-Content -LiteralPath $env:CDF_FAKE_LOG -Value 'DENIED budget'
@@ -122,6 +146,8 @@ if ($env:CDF_FAKE_ALLOW_MUTATION -eq '1' -and "$tool $command" -match $changes) 
             Add-Content -LiteralPath $env:CDF_FAKE_LOG -Value "BUDGET amount=$($json.properties.amount) grain=$($json.properties.timeGrain) start=$($json.properties.timePeriod.startDate) end=$($json.properties.timePeriod.endDate) alerts=$(@($json.properties.notifications.PSObject.Properties).Count) emails=$emails"
         }
     }
+    if ($command -match '^containerapp secret set .*--secrets (\S+)') { Add-Content -LiteralPath $env:CDF_FAKE_LOG -Value "SECRETSET $($Matches[1])" }
+    if ($command -match '^containerapp update .*--set-env-vars (\S+)') { Add-Content -LiteralPath $env:CDF_FAKE_LOG -Value "ENVSET $($Matches[1])" }
     Add-Content -LiteralPath $env:CDF_FAKE_LOG -Value "MUTATION $tool $command"
     Reply ''
 }

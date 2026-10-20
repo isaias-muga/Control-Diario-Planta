@@ -19,7 +19,7 @@ namespace DairyControl.Infrastructure.Tests
                 "CREATE TRIGGER Usuarios_RowVersion_Insert AFTER INSERT ON Usuarios BEGIN UPDATE Usuarios SET RowVersion = randomblob(8) WHERE Id = NEW.Id; END;");
             context.Database.ExecuteSqlRaw(
                 "CREATE TRIGGER Usuarios_RowVersion_Update AFTER UPDATE OF Username, Nombre, Rol, Activo, PasswordHash, SecurityStamp, DebeCambiarPassword, " +
-                "FallosLogin, LoginBloqueadoHastaUtc, FallosPin, PrimerFalloPinUtc, PinBloqueadoHastaUtc ON Usuarios " +
+                "FallosLogin, LoginBloqueadoHastaUtc, FallosPin, PrimerFalloPinUtc, PinBloqueadoHastaUtc, Protegido ON Usuarios " +
                 "BEGIN UPDATE Usuarios SET RowVersion = randomblob(8) WHERE Id = NEW.Id; END;");
         }
 

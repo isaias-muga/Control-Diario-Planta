@@ -137,7 +137,7 @@ namespace DairyControl.Application.Tests
         {
             // Arrange
             var escenario = new Escenario();
-            escenario.Usuario.Desactivar();
+            escenario.Usuario.Desactivar(DairyControl.Domain.ValueObjects.MotivoDeCambio.Create("Baja de prueba"), Guid.NewGuid(), new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc));
 
             // Act
             var result = await escenario.Servicio().LoginAsync(new LoginDto { Username = "maria", Password = "clave-correcta" });
@@ -201,7 +201,7 @@ namespace DairyControl.Application.Tests
         {
             // Arrange
             var escenario = new Escenario();
-            escenario.Usuario.Desactivar();
+            escenario.Usuario.Desactivar(DairyControl.Domain.ValueObjects.MotivoDeCambio.Create("Baja de prueba"), Guid.NewGuid(), new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc));
 
             // Act
             var result = await escenario.Servicio().RenovarAsync();
@@ -244,7 +244,7 @@ namespace DairyControl.Application.Tests
         {
             // Arrange
             var escenario = new Escenario();
-            escenario.Usuario.Desactivar();
+            escenario.Usuario.Desactivar(DairyControl.Domain.ValueObjects.MotivoDeCambio.Create("Baja de prueba"), Guid.NewGuid(), new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc));
 
             // Act
             var result = await escenario.Servicio().ValidarSesionAsync(escenario.Usuario.Id, escenario.Usuario.SecurityStamp);

@@ -1,6 +1,6 @@
 # Definition of the production API container app, applied by .github/workflows/deploy-production.yml with
 # `az containerapp update --yaml` after __IMAGE__ is replaced by the image of the commit being deployed.
-# Only names of secrets appear here (secretRef); the secret values were set once by infra/production.ps1 and never live in a file.
+# Only names of secrets appear here (secretRef); the secret values were set by infra/production.ps1 and never live in a file.
 # AdminUser__ForzarCambioPassword is deliberately NOT set: production keeps the default (true), so the bootstrap admin must choose its
 # own password at the first login.
 properties:
@@ -20,6 +20,10 @@ properties:
             secretRef: pin-secret
           - name: AdminUser__Password
             secretRef: admin-password
+          # The owner accounts (comma-separated usernames; the bootstrap admin is always protected). The secret is created by
+          # infra/production.ps1 (rerun it before the first deploy that has this line; -ActualizarProtegidos changes the names).
+          - name: AdminUser__Protegidos
+            secretRef: protected-usernames
           - name: Database__ApplyMigrationsOnStartup
             value: "true"
           - name: DemoData__SeedOnStartup

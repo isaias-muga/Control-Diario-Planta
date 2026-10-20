@@ -22,6 +22,15 @@ namespace DairyControl.Application.DTOs
         public string Rol { get; set; } = string.Empty;
         public bool Activo { get; set; }
         public bool DebeCambiarPassword { get; set; }
+
+        /// <summary>An owner account (set by configuration only): the UI shows a lock and offers no deactivate, role or reset actions.</summary>
+        public bool Protegido { get; set; }
+    }
+
+    public class CambiarRolDto
+    {
+        public string? Rol { get; set; }
+        public string? Motivo { get; set; }
     }
 
     public class CrearUsuarioDto

@@ -88,6 +88,17 @@ await PasoDeArranque.EjecutarAsync(app.Logger, "crear el primer administrador", 
     }
 });
 
+// The owner accounts (AdminUser:Username and AdminUser:Protegidos) are protected; nothing but this configuration sets or clears the flag
+await PasoDeArranque.EjecutarAsync(app.Logger, "marcar las cuentas protegidas", async () =>
+{
+    using var scope = app.Services.CreateScope();
+    var inexistentes = await scope.ServiceProvider.GetRequiredService<UsuarioAppService>().SincronizarProtegidosAsync();
+    foreach (var username in inexistentes)
+    {
+        app.Logger.LogWarning("AdminUser:Protegidos nombra a '{Username}', pero no hay un usuario con ese nombre.", username);
+    }
+});
+
 var resetDemoData = app.Configuration.GetValue<bool>("DemoData:ResetOnStartup");
 var seedDemoData = app.Configuration.GetValue<bool>("DemoData:SeedOnStartup");
 if (resetDemoData || seedDemoData)

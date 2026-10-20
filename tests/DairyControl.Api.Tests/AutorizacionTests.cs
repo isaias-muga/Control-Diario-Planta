@@ -48,9 +48,15 @@ namespace DairyControl.Api.Tests
             ("POST", "/api/Usuarios", [RolUsuario.Admin]),
             ("POST", $"/api/Usuarios/{UnId}/desactivar", [RolUsuario.Admin]),
             ("POST", $"/api/Usuarios/{UnId}/restablecer-password", [RolUsuario.Admin]),
+            // Protected accounts, reactivation and the history of usuarios and operarios: Admin only (the Usuarios page is Admin only)
+            ("POST", $"/api/Usuarios/{UnId}/reactivar", [RolUsuario.Admin]),
+            ("PUT", $"/api/Usuarios/{UnId}/rol", [RolUsuario.Admin]),
+            ("GET", $"/api/Usuarios/{UnId}/historial", [RolUsuario.Admin]),
             ("GET", "/api/Operarios", [RolUsuario.Admin]),
             ("POST", "/api/Operarios", [RolUsuario.Admin]),
             ("POST", $"/api/Operarios/{UnId}/desactivar", [RolUsuario.Admin]),
+            ("POST", $"/api/Operarios/{UnId}/reactivar", [RolUsuario.Admin]),
+            ("GET", $"/api/Operarios/{UnId}/historial", [RolUsuario.Admin]),
             ("PUT", $"/api/Operarios/{UnId}/pin", [RolUsuario.Admin]),
             ("POST", "/api/Auth/renovar", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion, RolUsuario.Consulta]),
             ("POST", "/api/Auth/cambiar-password", [RolUsuario.Admin, RolUsuario.Oficina, RolUsuario.Recepcion, RolUsuario.Consulta]),
@@ -203,7 +209,7 @@ namespace DairyControl.Api.Tests
             var antes = await cliente.GetAsync("/api/Proveedores/opciones", TestContext.Current.CancellationToken);
 
             // Act: the same token, after the admin deactivated the user
-            usuario.Desactivar();
+            usuario.Desactivar(DairyControl.Domain.ValueObjects.MotivoDeCambio.Create("Baja de prueba"), Guid.NewGuid(), new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc));
             var despues = await cliente.GetAsync("/api/Proveedores/opciones", TestContext.Current.CancellationToken);
 
             // Assert
@@ -234,7 +240,7 @@ namespace DairyControl.Api.Tests
             var cliente = _fabrica.ClienteDe(usuario);
 
             // Act
-            usuario.CambiarRol(RolUsuario.Oficina);
+            usuario.CambiarRol(RolUsuario.Oficina, DairyControl.Domain.ValueObjects.MotivoDeCambio.Create("Cambio de prueba"), Guid.NewGuid(), new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc));
             var respuesta = await cliente.GetAsync("/api/Usuarios", TestContext.Current.CancellationToken);
 
             // Assert

@@ -4,7 +4,8 @@ using DairyControl.Domain.ValueObjects;
 namespace DairyControl.Domain.Entities
 {
     /// <summary>
-    /// One field that changed in a correction (or the void of a recepción, or the deactivation of a proveedor): what it was, what it is,
+    /// One field that changed in a correction (or the void of a recepción, the deactivation of a proveedor, or a change to a usuario or
+    /// operario: creation, deactivation, reactivation, role, password or PIN, never their values): what it was, what it is,
     /// who did it, when and why. The history is append-only: nothing in the system updates or deletes these rows, and a change to a
     /// recepción or a proveedor is saved together with its entries. It is its own aggregate root (the history grows without bound, so it
     /// never lives inside the recepción) and it refers to what it describes by id.
@@ -13,6 +14,8 @@ namespace DairyControl.Domain.Entities
     {
         public const string EntidadRecepcion = "Recepcion";
         public const string EntidadProveedor = "Proveedor";
+        public const string EntidadUsuario = "Usuario";
+        public const string EntidadOperario = "Operario";
         public const int CampoMaxLength = 50;
         public const int ValorMaxLength = 500;
 
@@ -32,6 +35,10 @@ namespace DairyControl.Domain.Entities
             public const string Anulacion = "anulacion";
             public const string Nombre = "nombre";
             public const string Activo = "activo";
+            public const string Alta = "alta";
+            public const string Rol = "rol";
+            public const string Password = "password";
+            public const string Pin = "pin";
         }
 
         public Guid Id { get; private set; }
@@ -55,7 +62,7 @@ namespace DairyControl.Domain.Entities
             Guid usuarioId, DateTime enUtc, MotivoDeCambio motivo)
         {
             ArgumentNullException.ThrowIfNull(motivo);
-            if (entidad != EntidadRecepcion && entidad != EntidadProveedor)
+            if (entidad is not (EntidadRecepcion or EntidadProveedor or EntidadUsuario or EntidadOperario))
             {
                 throw new ReglaDeNegocioException("La entidad del cambio no es válida.", nameof(entidad));
             }
