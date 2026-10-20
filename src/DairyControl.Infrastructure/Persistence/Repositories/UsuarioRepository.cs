@@ -25,8 +25,6 @@ namespace DairyControl.Infrastructure.Persistence.Repositories
 
         public async Task<IReadOnlyList<Usuario>> GetAllAsync() => await _context.Usuarios.AsNoTracking().ToListAsync();
 
-        public async Task<IReadOnlyList<Usuario>> GetAllParaModificarAsync() => await _context.Usuarios.ToListAsync();
-
         // The unique index on Username is the last line of defense when two admins create the same user at once.
         public async Task AddAsync(Usuario usuario, CambioRegistrado cambio)
         {
@@ -71,15 +69,23 @@ namespace DairyControl.Infrastructure.Persistence.Repositories
                     {
                         throw new ReglaDeNegocioException(Usuario.MensajeUltimoAdmin, "id");
                     }
-                    await _context.SaveChangesAsync();
+                    // Not accepted yet: if the commit fails and the strategy retries, the tracker must still see the changes as pending
+                    await _context.SaveChangesAsync(acceptAllChangesOnSuccess: false);
                     await transaccion.CommitAsync();
                 });
+                _context.ChangeTracker.AcceptAllChanges();
             }
             catch (DbUpdateConcurrencyException)
             {
                 // A login attempt (or another admin) saved this row after it was read
                 _context.Entry(cambio).State = EntityState.Detached;
                 throw new ConflictoDeConcurrenciaException("El usuario cambió mientras tanto. Recargá la página y probá de nuevo.");
+            }
+            catch
+            {
+                // Refused (last Admin) or failed: the entry describes a change that did not happen, so a later save must not write it
+                _context.Entry(cambio).State = EntityState.Detached;
+                throw;
             }
         }
 

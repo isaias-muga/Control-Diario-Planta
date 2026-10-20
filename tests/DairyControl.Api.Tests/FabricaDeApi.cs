@@ -51,7 +51,6 @@ namespace DairyControl.Api.Tests
         {
             // Lists come back empty instead of null, so an allowed call does not fail inside the service
             Usuarios.Setup(u => u.GetAllAsync()).ReturnsAsync([]);
-            Usuarios.Setup(u => u.GetAllParaModificarAsync()).ReturnsAsync([]);
             Operarios.Setup(o => o.GetAllAsync()).ReturnsAsync([]);
             Proveedores.Setup(p => p.GetAllAsync()).ReturnsAsync([]);
             // The plant has three silos, as a new database does

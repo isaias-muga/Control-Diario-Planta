@@ -9,9 +9,6 @@ namespace DairyControl.Domain.Interfaces
         Task<bool> AnyAsync();
         Task<IReadOnlyList<Usuario>> GetAllAsync();
 
-        /// <summary>The users as tracked entities, to change several of them and save once with <see cref="UpdateAsync"/>.</summary>
-        Task<IReadOnlyList<Usuario>> GetAllParaModificarAsync();
-
         /// <summary>
         /// Saves a new user together with its creation entry in the history (both or none).
         /// Throws <see cref="Exceptions.ConflictoDeUnicidadException"/> when the username is taken.

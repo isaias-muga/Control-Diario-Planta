@@ -171,15 +171,16 @@ namespace DairyControl.Application.Services
                 protegidos.Add(ajustes.Username.Trim());
             }
 
-            var usuarios = await _usuarios.GetAllParaModificarAsync();
-            var cambioAlgo = false;
+            var usuarios = await _usuarios.GetAllAsync();
             foreach (var usuario in usuarios)
             {
-                cambioAlgo |= usuario.MarcarProtegido(protegidos.Contains(usuario.Username));
-            }
-            if (cambioAlgo)
-            {
-                await _usuarios.UpdateAsync(usuarios[0]);
+                var debeSerProtegido = protegidos.Contains(usuario.Username);
+                if (usuario.Protegido != debeSerProtegido)
+                {
+                    // One user at a time on top of its current state: a login attempt saved in between (the old revision keeps serving
+                    // during a deploy) is retried instead of stopping the start
+                    await _usuarios.ModificarAsync(usuario.Id, u => u.MarcarProtegido(debeSerProtegido));
+                }
             }
 
             return protegidos.Where(nombre => !usuarios.Any(u => string.Equals(u.Username, nombre, StringComparison.OrdinalIgnoreCase))).ToList();

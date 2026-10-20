@@ -556,7 +556,10 @@ namespace DairyControl.Application.Tests
             var otro = Usuario.Crear("otro", "Otro", RolUsuario.Admin, "h");
             var exProtegido = Usuario.Crear("viejo", "Viejo", RolUsuario.Admin, "h");
             exProtegido.MarcarProtegido(true);
-            escenario.Usuarios.Setup(u => u.GetAllParaModificarAsync()).ReturnsAsync(new List<Usuario> { admin, dueno, otro, exProtegido });
+            escenario.Usuarios.Setup(u => u.GetAllAsync()).ReturnsAsync(new List<Usuario> { admin, dueno, otro, exProtegido });
+            escenario.Usuarios.AplicarModificaciones(admin);
+            escenario.Usuarios.AplicarModificaciones(dueno);
+            escenario.Usuarios.AplicarModificaciones(exProtegido);
             var ajustes = new AdminUserSettings { Username = "admin", Password = "x", Protegidos = " dueno , ,admin" };
 
             // Act
@@ -568,7 +571,9 @@ namespace DairyControl.Application.Tests
             Assert.False(otro.Protegido);
             Assert.False(exProtegido.Protegido);
             Assert.Empty(inexistentes);
-            escenario.Usuarios.Verify(u => u.UpdateAsync(It.IsAny<Usuario>()), Times.Once);
+            // Only the three that had to change are saved, each on top of its current state; "otro" is already right
+            escenario.Usuarios.Verify(u => u.ModificarAsync(It.IsAny<Guid>(), It.IsAny<Func<Usuario, bool>>()), Times.Exactly(3));
+            escenario.Usuarios.Verify(u => u.ModificarAsync(otro.Id, It.IsAny<Func<Usuario, bool>>()), Times.Never);
         }
 
         [Fact]
@@ -578,13 +583,13 @@ namespace DairyControl.Application.Tests
             var escenario = new Escenario();
             var admin = Usuario.Crear("admin", "Administrador", RolUsuario.Admin, "h");
             admin.MarcarProtegido(true);
-            escenario.Usuarios.Setup(u => u.GetAllParaModificarAsync()).ReturnsAsync(new List<Usuario> { admin });
+            escenario.Usuarios.Setup(u => u.GetAllAsync()).ReturnsAsync(new List<Usuario> { admin });
 
             // Act
             await escenario.Servicio().SincronizarProtegidosAsync();
 
             // Assert
-            escenario.Usuarios.Verify(u => u.UpdateAsync(It.IsAny<Usuario>()), Times.Never);
+            escenario.Usuarios.Verify(u => u.ModificarAsync(It.IsAny<Guid>(), It.IsAny<Func<Usuario, bool>>()), Times.Never);
         }
 
         [Fact]
@@ -592,7 +597,7 @@ namespace DairyControl.Application.Tests
         {
             // Arrange
             var escenario = new Escenario();
-            escenario.Usuarios.Setup(u => u.GetAllParaModificarAsync()).ReturnsAsync(new List<Usuario>());
+            escenario.Usuarios.Setup(u => u.GetAllAsync()).ReturnsAsync(new List<Usuario>());
             var ajustes = new AdminUserSettings { Username = "admin", Password = "x", Protegidos = "dueno" };
 
             // Act
