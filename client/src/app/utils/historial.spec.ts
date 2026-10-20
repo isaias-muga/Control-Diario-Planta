@@ -9,6 +9,10 @@ describe('historial', () => {
       ['anulacion', 'Estado'],
       ['nombre', 'Nombre'],
       ['activo', 'Estado'],
+      ['rol', 'Rol'],
+      ['password', 'Contraseña'],
+      ['pin', 'PIN'],
+      ['alta', 'Alta'],
     ])('names %s as %s', (campo, etiqueta) => {
       expect(etiquetaCampo(campo)).toBe(etiqueta);
     });
@@ -41,6 +45,12 @@ describe('historial', () => {
     it('shows text as it is', () => {
       expect(textoValor('proveedor', 'Tambo Don Pedro')).toBe('Tambo Don Pedro');
       expect(textoValor('anulacion', 'Anulada')).toBe('Anulada');
+    });
+
+    it('shows the roles of a user as the Usuarios page names them', () => {
+      expect(textoValor('rol', 'Admin')).toBe('Administrador');
+      expect(textoValor('rol', 'Recepcion')).toBe('Celular de recepción');
+      expect(textoValor('rol', 'Otro')).toBe('Otro');
     });
 
     it('does not break on a number that is not one', () => {

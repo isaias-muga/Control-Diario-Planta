@@ -16,6 +16,18 @@ const ETIQUETAS: Record<string, string> = {
   anulacion: 'Estado',
   nombre: 'Nombre',
   activo: 'Estado',
+  alta: 'Alta',
+  rol: 'Rol',
+  password: 'Contraseña',
+  pin: 'PIN',
+};
+
+/** The roles as the API writes them in the history of a user, in the words of the Usuarios page. */
+const ROLES: Record<string, string> = {
+  Admin: 'Administrador',
+  Oficina: 'Oficina',
+  Consulta: 'Consulta (solo lectura)',
+  Recepcion: 'Celular de recepción',
 };
 
 const NUMERICOS = new Set(['litros', 'grasa', 'acidez', 'temperatura', 'agua']);
@@ -41,6 +53,9 @@ export function textoValor(campo: string, valor: string | null): string {
   }
   if (campo === 'fechaHora') {
     return textoFechaHora(valor);
+  }
+  if (campo === 'rol') {
+    return ROLES[valor] ?? valor;
   }
   return valor;
 }

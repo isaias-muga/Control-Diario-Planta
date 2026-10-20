@@ -7,7 +7,8 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { ConfirmarAccionDialog, ConfirmarAccionDialogData } from '../../components/confirmar-accion-dialog/confirmar-accion-dialog';
+import { HistorialDialog, HistorialDialogData } from '../../components/historial-dialog/historial-dialog';
+import { MotivoDialog, MotivoDialogData } from '../../components/motivo-dialog/motivo-dialog';
 import { ETIQUETAS_ROL, UsuarioDialog } from '../../components/usuario-dialog/usuario-dialog';
 import { OperarioDialog } from '../../components/operario-dialog/operario-dialog';
 import { ValorSecretoDialog, ValorSecretoDialogData } from '../../components/valor-secreto-dialog/valor-secreto-dialog';
@@ -17,7 +18,10 @@ import { UsuariosService } from '../../services/usuarios';
 import { getApiErrorMessage } from '../../utils/api-error';
 import { Rol } from '../../utils/jwt';
 
-/** Admin only: who can log in, and the operarios of the reception phone with their PINs. */
+export const TEXTO_CUENTA_PROTEGIDA =
+  'Cuenta protegida: otro administrador no puede desactivarla, cambiarle el rol ni restablecerle la contraseña.';
+
+/** Admin only: who can log in, and the operarios of the reception phone with their PINs. Every change asks for a reason and has a history. */
 @Component({
   selector: 'app-usuarios',
   imports: [MatButtonModule, MatCardModule, MatProgressSpinnerModule, MatTableModule, MatTooltipModule],
@@ -32,6 +36,7 @@ export class Usuarios {
 
   protected readonly columnasUsuarios = ['username', 'nombre', 'rol', 'estado', 'acciones'];
   protected readonly columnasOperarios = ['opNombre', 'opEstado', 'opAcciones'];
+  protected readonly textoCuentaProtegida = TEXTO_CUENTA_PROTEGIDA;
 
   usuarios = signal<Usuario[]>([]);
   operarios = signal<Operario[]>([]);
@@ -44,6 +49,11 @@ export class Usuarios {
 
   protected etiqueta(rol: Rol): string {
     return ETIQUETAS_ROL[rol];
+  }
+
+  /** The API refuses it anyway (403); the client only saves the click. A protected account can only be changed by its own user. */
+  protected puedeTocar(usuario: Usuario): boolean {
+    return !usuario.protegido || usuario.id === this.auth.id();
   }
 
   cargar(): void {
@@ -114,27 +124,86 @@ export class Usuarios {
   }
 
   desactivarUsuario(usuario: Usuario): void {
-    this.confirmar(
+    this.pedirMotivo(
       {
         titulo: `¿Desactivar a ${usuario.username}?`,
-        mensaje: 'Sus sesiones se cierran ahora y no va a poder volver a entrar.',
+        mensaje: 'Sus sesiones se cierran ahora y no va a poder entrar hasta que lo reactives.',
         confirmar: 'Desactivar',
+        peligro: true,
+        guardar: (motivo) => this.servicio.desactivarUsuario(usuario.id, motivo),
       },
-      () => this.servicio.desactivarUsuario(usuario.id),
       'Usuario desactivado.',
     );
   }
 
+  reactivarUsuario(usuario: Usuario): void {
+    this.pedirMotivo(
+      {
+        titulo: `¿Reactivar a ${usuario.username}?`,
+        mensaje: 'Va a poder entrar de nuevo con su contraseña anterior, y tiene que elegir una nueva al entrar. Si no la recuerda, restablecésela después.',
+        confirmar: 'Reactivar',
+        guardar: (motivo) => this.servicio.reactivarUsuario(usuario.id, motivo),
+      },
+      'Usuario reactivado.',
+    );
+  }
+
+  cambiarRol(usuario: Usuario): void {
+    this.pedirMotivo(
+      {
+        titulo: `Cambiar el rol de ${usuario.username}`,
+        mensaje: `Hoy es ${ETIQUETAS_ROL[usuario.rol]}. Sus sesiones abiertas se cierran y vuelve a entrar con el rol nuevo.`,
+        confirmar: 'Cambiar rol',
+        opcion: {
+          etiqueta: 'Rol nuevo',
+          opciones: (Object.keys(ETIQUETAS_ROL) as Rol[])
+            .filter((rol) => rol !== usuario.rol)
+            .map((rol) => ({ valor: rol, etiqueta: ETIQUETAS_ROL[rol] })),
+        },
+        guardar: (motivo, _nombre, rol) => this.servicio.cambiarRol(usuario.id, rol as Rol, motivo),
+      },
+      'Rol cambiado.',
+    );
+  }
+
+  verHistorialUsuario(usuario: Usuario): void {
+    this.abrirHistorial({
+      titulo: `Historial de ${usuario.username}`,
+      contexto: usuario.nombre,
+      cargar: () => this.servicio.getHistorialUsuario(usuario.id),
+    });
+  }
+
   desactivarOperario(operario: Operario): void {
-    this.confirmar(
+    this.pedirMotivo(
       {
         titulo: `¿Desactivar a ${operario.nombre}?`,
         mensaje: 'Su PIN deja de funcionar. Las recepciones que cargó siguen a su nombre.',
         confirmar: 'Desactivar',
+        peligro: true,
+        guardar: (motivo) => this.servicio.desactivarOperario(operario.id, motivo),
       },
-      () => this.servicio.desactivarOperario(operario.id),
       'Operario desactivado.',
     );
+  }
+
+  reactivarOperario(operario: Operario): void {
+    this.pedirMotivo(
+      {
+        titulo: `¿Reactivar a ${operario.nombre}?`,
+        mensaje: 'Su PIN anterior vuelve a funcionar. Si otro operario activo ya usa ese PIN, no se puede reactivar hasta que ese otro se desactive.',
+        confirmar: 'Reactivar',
+        guardar: (motivo) => this.servicio.reactivarOperario(operario.id, motivo),
+      },
+      'Operario reactivado.',
+    );
+  }
+
+  verHistorialOperario(operario: Operario): void {
+    this.abrirHistorial({
+      titulo: `Historial de ${operario.nombre}`,
+      cargar: () => this.servicio.getHistorialOperario(operario.id),
+    });
   }
 
   private abrirSecreto(data: ValorSecretoDialogData, aviso: string): void {
@@ -149,22 +218,21 @@ export class Usuarios {
       });
   }
 
-  private confirmar(data: ConfirmarAccionDialogData, accion: () => ReturnType<UsuariosService['desactivarUsuario']>, aviso: string): void {
+  /** Asks for the reason and does the change; the dialog shows the API's message (403, 409...) when it fails. */
+  private pedirMotivo(data: MotivoDialogData, aviso: string): void {
     this.dialog
-      .open<ConfirmarAccionDialog, ConfirmarAccionDialogData, boolean>(ConfirmarAccionDialog, { data, role: 'alertdialog', width: '420px', maxWidth: '95vw' })
+      .open<MotivoDialog, MotivoDialogData, boolean>(MotivoDialog, { data, width: '480px', maxWidth: '95vw' })
       .afterClosed()
-      .subscribe((confirmado) => {
-        if (!confirmado) {
-          return;
+      .subscribe((guardado) => {
+        if (guardado) {
+          this.avisar(aviso);
+          this.cargar();
         }
-        accion().subscribe({
-          next: () => {
-            this.avisar(aviso);
-            this.cargar();
-          },
-          error: (err: HttpErrorResponse) => this.avisar(getApiErrorMessage(err, 'No se pudo completar la acción.')),
-        });
       });
+  }
+
+  private abrirHistorial(data: HistorialDialogData): void {
+    this.dialog.open<HistorialDialog, HistorialDialogData>(HistorialDialog, { data, width: '560px', maxWidth: '95vw' });
   }
 
   private avisar(mensaje: string): void {

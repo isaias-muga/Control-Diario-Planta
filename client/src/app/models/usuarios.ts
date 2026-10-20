@@ -7,6 +7,8 @@ export interface Usuario {
   rol: Rol;
   activo: boolean;
   debeCambiarPassword: boolean;
+  /** An owner account (set by configuration only): no other Admin can deactivate it, change its role or reset its password. */
+  protegido: boolean;
 }
 
 export interface CrearUsuario {

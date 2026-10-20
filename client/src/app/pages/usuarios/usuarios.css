@@ -54,7 +54,7 @@
   --tabla-padding-vertical: 12px;
   table-layout: fixed;
   width: 100%;
-  min-width: 900px;
+  min-width: 1180px;
 }
 
 th.mat-mdc-header-cell,
@@ -77,15 +77,15 @@ td.mat-mdc-cell:last-of-type {
   padding-right: var(--tabla-padding-borde);
 }
 
+/* Usuarios: the actions (up to four buttons) take the rest, 40% */
 .mat-column-username { width: 20%; }
-.mat-column-nombre { width: 20%; }
-.mat-column-rol { width: 17%; }
-.mat-column-estado { width: 15%; }
-/* .mat-column-acciones takes the rest (28%): it needs room for its two buttons */
+.mat-column-nombre { width: 14%; }
+.mat-column-rol { width: 14%; }
+.mat-column-estado { width: 12%; }
 
 /* Operarios: the name takes the rest */
 .mat-column-opEstado { width: 18%; }
-.mat-column-opAcciones { width: 34%; }
+.mat-column-opAcciones { width: 36%; }
 
 .inactivo {
   color: var(--mat-sys-on-surface-variant);
@@ -94,4 +94,19 @@ td.mat-mdc-cell:last-of-type {
 .vacio {
   text-align: left;
   color: var(--mat-sys-on-surface-variant);
+}
+
+/* The owner accounts: a lock badge next to the username */
+.insignia-protegida {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 16px;
+  vertical-align: middle;
+  color: var(--mat-sys-on-secondary-container);
+  background: var(--mat-sys-secondary-container);
 }

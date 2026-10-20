@@ -117,6 +117,40 @@ describe('MotivoDialog', () => {
     expect(el().querySelector('button[type="submit"]')?.classList).toContain('peligro');
   });
 
+  describe('with an option (the new role of a user)', () => {
+    const conOpcion = {
+      etiqueta: 'Rol nuevo',
+      opciones: [
+        { valor: 'Consulta', etiqueta: 'Consulta (solo lectura)' },
+        { valor: 'Oficina', etiqueta: 'Oficina' },
+      ],
+    };
+
+    it('sends the chosen option with the reason', async () => {
+      const guardar = vi.fn(() => of(null));
+      await abrir({ guardar, opcion: conOpcion, confirmar: 'Cambiar rol' });
+      interno().form.controls.opcion.setValue('Consulta');
+      interno().form.controls.motivo.setValue('Pasa a solo lectura');
+
+      interno().confirmar();
+
+      expect(guardar).toHaveBeenCalledWith('Pasa a solo lectura', null, 'Consulta');
+      expect(cerrado).toEqual([true]);
+    });
+
+    it('does not do anything until an option is chosen', async () => {
+      const guardar = vi.fn(() => of(null));
+      await abrir({ guardar, opcion: conOpcion });
+      interno().form.controls.motivo.setValue('Pasa a solo lectura');
+
+      interno().confirmar();
+      fixture.detectChanges();
+
+      expect(guardar).not.toHaveBeenCalled();
+      expect(texto()).toContain('Elegí una opción.');
+    });
+  });
+
   describe('with a name (correcting the name of a proveedor)', () => {
     const conNombre = { etiqueta: 'Nombre', valor: 'Tambo Don Pedro' };
 

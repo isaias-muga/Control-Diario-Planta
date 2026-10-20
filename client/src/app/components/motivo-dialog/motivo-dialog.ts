@@ -5,6 +5,7 @@ import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/materia
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { Observable } from 'rxjs';
 import { MOTIVO_MAX_LENGTH, MOTIVO_MIN_LENGTH, NOMBRE_MAX_LENGTH } from '../../models/limits';
 import { getApiErrorField, getApiErrorMessage } from '../../utils/api-error';
@@ -18,8 +19,10 @@ export interface MotivoDialogData {
   peligro?: boolean;
   /** Also asks for a name (correcting the name of a proveedor). */
   nombre?: { etiqueta: string; valor: string };
-  /** Does the change; the dialog stays open and shows the API's message when it fails. */
-  guardar: (motivo: string, nombre: string | null) => Observable<unknown>;
+  /** Also asks to choose one of a few options (the new role of a user). */
+  opcion?: { etiqueta: string; opciones: { valor: string; etiqueta: string }[] };
+  /** Does the change; the dialog stays open and shows the API's message when it fails. The chosen option is passed only when asked for. */
+  guardar: (motivo: string, nombre: string | null, opcion?: string) => Observable<unknown>;
 }
 
 /**
@@ -28,7 +31,7 @@ export interface MotivoDialogData {
  */
 @Component({
   selector: 'app-motivo-dialog',
-  imports: [ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatButtonModule],
+  imports: [ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule],
   templateUrl: './motivo-dialog.html',
   styleUrl: './motivo-dialog.css',
 })
@@ -46,6 +49,7 @@ export class MotivoDialog {
       this.data.nombre?.valor ?? '',
       this.data.nombre ? [Validators.required, Validators.pattern(/\S/), Validators.maxLength(NOMBRE_MAX_LENGTH)] : [],
     ],
+    opcion: ['', this.data.opcion ? [Validators.required] : []],
     motivo: ['', [motivoSuficiente, Validators.maxLength(MOTIVO_MAX_LENGTH)]],
   });
   protected saving = signal(false);
@@ -62,8 +66,10 @@ export class MotivoDialog {
     }
     this.saving.set(true);
     this.saveError.set(null);
-    const { nombre, motivo } = this.form.getRawValue();
-    this.data.guardar(motivo.trim(), this.data.nombre ? nombre.trim() : null).subscribe({
+    const { nombre, motivo, opcion } = this.form.getRawValue();
+    const nombreFinal = this.data.nombre ? nombre.trim() : null;
+    const cambio = this.data.opcion ? this.data.guardar(motivo.trim(), nombreFinal, opcion) : this.data.guardar(motivo.trim(), nombreFinal);
+    cambio.subscribe({
       next: () => {
         this.saving.set(false);
         this.dialogRef.close(true);
