@@ -60,7 +60,7 @@ Están **por encima** de la línea de aprobación a propósito: la regla de la e
 
 ## 4. Aprobación
 
-Aprobado (módulos, contratos y grafo): 
+Aprobado (módulos, contratos y grafo): Isaías Muga, 2026-10-21. Owners: Isaías en todos los módulos por ahora. 
 
 _La línea de arriba la completa el líder técnico al aprobar (control 2). Los contratos nuevos valen solo si aparecen con su versión en la tabla de abajo, por debajo de esta línea._
 
