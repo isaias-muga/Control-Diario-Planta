@@ -13,9 +13,9 @@ on:
 permissions:
   contents: read
 
-# One run per PR: a new push cancels the older one. Never on main, where every push to the branch must finish.
+# One run per PR: a new push cancels the older one. Main gets one group per commit, so no push to main is ever cancelled or replaced.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Skips the work when only non-code files changed (docs, templates). The same script is in the three jobs.
+      # Skips the work when only non-code files changed (docs, templates) or, for e2e, on a draft. Same script in the three jobs.
       - name: Decide whether to run
         id: plan
         env:
@@ -34,41 +34,7 @@ jobs:
           BEFORE: ${{ github.event.before }}
           DRAFT: ${{ github.event.pull_request.draft }}
           SKIP_DRAFT: "false"
-        run: |
-          set -euo pipefail
-          is_doc() {
-            case "$1" in
-              *.md|docs/*|.github/ISSUE_TEMPLATE/*|.github/pull_request_template.md|LICENSE|.gitignore) return 0 ;;
-            esac
-            return 1
-          }
-          run=true
-          reason="code changed"
-          if [ "$SKIP_DRAFT" = "true" ] && [ "$DRAFT" = "true" ]; then
-            run=false
-            reason="draft pull request"
-          else
-            # A pull request is checked out as a merge commit whose first parent is the base: HEAD^1..HEAD is what the PR changes.
-            # A push to main is compared with the previous tip (for a merge commit that is HEAD^1), or HEAD^1 if that is unknown.
-            base=""
-            if [ "$EVENT" != "pull_request" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
-              base="$BEFORE"
-            else
-              base="$(git rev-parse --verify --quiet HEAD^1 || true)"
-            fi
-            if [ -n "$base" ]; then
-              only_docs=true
-              while IFS= read -r f; do
-                if ! is_doc "$f"; then only_docs=false; break; fi
-              done < <(git diff --name-only --no-renames "$base" HEAD)
-              if [ "$only_docs" = "true" ]; then
-                run=false
-                reason="only non-code files changed"
-              fi
-            fi
-          fi
-          echo "run=$run" >> "$GITHUB_OUTPUT"
-          echo "::notice::run=$run ($reason)"
+        run: bash .github/scripts/plan.sh
 
       - uses: actions/setup-dotnet@v6
         if: steps.plan.outputs.run == 'true'
@@ -101,41 +67,7 @@ jobs:
           BEFORE: ${{ github.event.before }}
           DRAFT: ${{ github.event.pull_request.draft }}
           SKIP_DRAFT: "false"
-        run: |
-          set -euo pipefail
-          is_doc() {
-            case "$1" in
-              *.md|docs/*|.github/ISSUE_TEMPLATE/*|.github/pull_request_template.md|LICENSE|.gitignore) return 0 ;;
-            esac
-            return 1
-          }
-          run=true
-          reason="code changed"
-          if [ "$SKIP_DRAFT" = "true" ] && [ "$DRAFT" = "true" ]; then
-            run=false
-            reason="draft pull request"
-          else
-            # A pull request is checked out as a merge commit whose first parent is the base: HEAD^1..HEAD is what the PR changes.
-            # A push to main is compared with the previous tip (for a merge commit that is HEAD^1), or HEAD^1 if that is unknown.
-            base=""
-            if [ "$EVENT" != "pull_request" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
-              base="$BEFORE"
-            else
-              base="$(git rev-parse --verify --quiet HEAD^1 || true)"
-            fi
-            if [ -n "$base" ]; then
-              only_docs=true
-              while IFS= read -r f; do
-                if ! is_doc "$f"; then only_docs=false; break; fi
-              done < <(git diff --name-only --no-renames "$base" HEAD)
-              if [ "$only_docs" = "true" ]; then
-                run=false
-                reason="only non-code files changed"
-              fi
-            fi
-          fi
-          echo "run=$run" >> "$GITHUB_OUTPUT"
-          echo "::notice::run=$run ($reason)"
+        run: bash .github/scripts/plan.sh
 
       - uses: actions/setup-node@v7
         if: steps.plan.outputs.run == 'true'
@@ -178,41 +110,7 @@ jobs:
           BEFORE: ${{ github.event.before }}
           DRAFT: ${{ github.event.pull_request.draft }}
           SKIP_DRAFT: "true"
-        run: |
-          set -euo pipefail
-          is_doc() {
-            case "$1" in
-              *.md|docs/*|.github/ISSUE_TEMPLATE/*|.github/pull_request_template.md|LICENSE|.gitignore) return 0 ;;
-            esac
-            return 1
-          }
-          run=true
-          reason="code changed"
-          if [ "$SKIP_DRAFT" = "true" ] && [ "$DRAFT" = "true" ]; then
-            run=false
-            reason="draft pull request"
-          else
-            # A pull request is checked out as a merge commit whose first parent is the base: HEAD^1..HEAD is what the PR changes.
-            # A push to main is compared with the previous tip (for a merge commit that is HEAD^1), or HEAD^1 if that is unknown.
-            base=""
-            if [ "$EVENT" != "pull_request" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
-              base="$BEFORE"
-            else
-              base="$(git rev-parse --verify --quiet HEAD^1 || true)"
-            fi
-            if [ -n "$base" ]; then
-              only_docs=true
-              while IFS= read -r f; do
-                if ! is_doc "$f"; then only_docs=false; break; fi
-              done < <(git diff --name-only --no-renames "$base" HEAD)
-              if [ "$only_docs" = "true" ]; then
-                run=false
-                reason="only non-code files changed"
-              fi
-            fi
-          fi
-          echo "run=$run" >> "$GITHUB_OUTPUT"
-          echo "::notice::run=$run ($reason)"
+        run: bash .github/scripts/plan.sh
 
       # Throwaway secrets for this run only; nothing here is a real credential.
       - name: Create .env
@@ -233,6 +131,7 @@ jobs:
         if: steps.plan.outputs.run == 'true'
         uses: docker/bake-action@v7
         with:
+          source: .
           files: compose.yaml
           targets: api,client
           load: true

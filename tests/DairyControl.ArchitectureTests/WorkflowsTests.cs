@@ -84,6 +84,24 @@ namespace DairyControl.ArchitectureTests
         }
 
         [Fact]
+        public void Ci_RequiredChecks_AlwaysStartAndReport()
+        {
+            // Arrange: the ruleset requires these three contexts; a required check that is not reported blocks the PR forever
+            var texto = SinComentarios(Path.Combine(CarpetaDeWorkflows, "ci.yml"));
+
+            // Assert: the jobs exist, nothing filters or skips them at workflow or job level, and no trigger is label- or comment-based
+            foreach (var job in new[] { "build-test", "client", "e2e" })
+                Assert.Matches($@"(?m)^  {job}:\s*$", texto);
+            Assert.DoesNotMatch(@"(?m)^\s*paths(-ignore)?:", texto);
+            Assert.DoesNotMatch(@"(?m)^  (build-test|client|e2e):[ 	]*?
+(?:    (?!steps:)[^
+]*
+)*?    if:", texto);
+            foreach (var disparador in new[] { "labeled", "issue_comment", "workflow_run" })
+                Assert.DoesNotContain(disparador, texto);
+        }
+
+        [Fact]
         public void WorkflowsFolder_HasNoOtherDeployWorkflow()
         {
             // Act
