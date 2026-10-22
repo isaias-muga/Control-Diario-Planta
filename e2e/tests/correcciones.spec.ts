@@ -8,6 +8,7 @@ import {
   loginComo,
   loginYEsperarInicio,
   registrarRecepcionPorApi,
+  abrirDialogo,
   rellenar,
   ticketUnico,
 } from '../helpers';
@@ -62,8 +63,7 @@ test('correcciones: correcting litros changes the totals, and the history shows 
   await abrirProveedor(page, proveedor.id, proveedor.nombre);
   await expect(page.getByText('Litros recibidos').locator('..')).toContainText('1.250');
   await expect(fila(page, ticket).getByRole('cell', { name: '1.250' }).first()).toBeVisible();
-  await page.getByRole('button', { name: 'Corregida 1 vez. Ver historial' }).click();
-  const historial = page.getByRole('dialog');
+  const historial = await abrirDialogo(page.getByRole('button', { name: 'Corregida 1 vez. Ver historial' }));
   await expect(historial).toContainText('Motivo: Error de tipeo en la balanza');
   await expect(historial).toContainText('Litros: 1.000 → 1.250');
   await expect(historial.getByText(/\d{2}\/\d{2}\/\d{4} \d{2}:\d{2} · \S+/)).toBeVisible(); // when and who
@@ -142,8 +142,7 @@ test('correcciones: voiding keeps the recepción as Anulada, out of the totals, 
   await expect(page.getByText('Litros recibidos').locator('..')).toContainText('1.500');
 
   await abrirMenuDeFila(page, anulada.ticket);
-  await page.getByRole('menuitem', { name: 'Anular' }).click();
-  const dialogo = page.getByRole('alertdialog');
+  const dialogo = await abrirDialogo(page.getByRole('menuitem', { name: 'Anular' }));
   await expect(dialogo).toContainText('no se puede volver a usar');
   await rellenar(dialogo.getByLabel('Motivo'), 'Se cargó dos veces');
   await dialogo.getByRole('button', { name: 'Anular' }).click();
@@ -160,10 +159,10 @@ test('correcciones: voiding keeps the recepción as Anulada, out of the totals, 
   await expect(page.getByRole('cell', { name: String(anulada.ticket), exact: true })).toBeVisible();
   await expect(fila(page, anulada.ticket).getByRole('button', { name: 'Anulada' })).toBeVisible();
   await expect(page.getByText('Litros recibidos').locator('..')).not.toContainText('1.500');
-  await fila(page, anulada.ticket).getByRole('button', { name: 'Anulada' }).click();
-  await expect(page.getByRole('dialog')).toContainText('Motivo: Se cargó dos veces');
-  await expect(page.getByRole('dialog')).toContainText('Estado: Vigente → Anulada');
-  await page.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click();
+  const historialAnulada = await abrirDialogo(fila(page, anulada.ticket).getByRole('button', { name: 'Anulada' }));
+  await expect(historialAnulada).toContainText('Motivo: Se cargó dos veces');
+  await expect(historialAnulada).toContainText('Estado: Vigente → Anulada');
+  await historialAnulada.getByRole('button', { name: 'Cerrar' }).click();
 
   // Voiding is final: only the history is left in the menu
   await abrirMenuDeFila(page, anulada.ticket);
@@ -188,8 +187,7 @@ test('correcciones: a deactivated proveedor is not offered for a new recepción,
   const { ticket } = await registrarRecepcionPorApi(request, proveedor.id, { litros: 800 });
   await abrirProveedor(page, proveedor.id, proveedor.nombre);
 
-  await page.getByRole('button', { name: 'Desactivar' }).click();
-  const dialogo = page.getByRole('dialog');
+  const dialogo = await abrirDialogo(page.getByRole('button', { name: 'Desactivar' }));
   await expect(dialogo).toContainText('Sus recepciones y su historial se conservan');
   await rellenar(dialogo.getByLabel('Motivo'), 'Dejó de entregar');
   await dialogo.getByRole('button', { name: 'Desactivar' }).click();
@@ -219,9 +217,9 @@ test('correcciones: a deactivated proveedor is not offered for a new recepción,
 
   // Reactivating offers it again
   await abrirProveedor(page, proveedor.id, `${proveedor.nombre} (inactivo)`);
-  await page.getByRole('button', { name: 'Reactivar' }).click();
-  await rellenar(page.getByRole('dialog').getByLabel('Motivo'), 'Volvió a entregar');
-  await page.getByRole('dialog').getByRole('button', { name: 'Reactivar' }).click();
+  const dialogoReactivar = await abrirDialogo(page.getByRole('button', { name: 'Reactivar' }));
+  await rellenar(dialogoReactivar.getByLabel('Motivo'), 'Volvió a entregar');
+  await dialogoReactivar.getByRole('button', { name: 'Reactivar' }).click();
   await expect(page.getByRole('link', { name: 'Registrar recepción' })).toBeVisible();
 });
 
@@ -229,8 +227,7 @@ test('correcciones: correcting the name of a proveedor needs a reason and the ol
   const proveedor = await crearProveedorConIdPorApi(request);
   await abrirProveedor(page, proveedor.id, proveedor.nombre);
 
-  await page.getByRole('button', { name: 'Corregir nombre' }).click();
-  const dialogo = page.getByRole('dialog');
+  const dialogo = await abrirDialogo(page.getByRole('button', { name: 'Corregir nombre' }));
   await rellenar(dialogo.getByLabel('Nombre'), `${proveedor.nombre} S.A.`);
   await dialogo.getByRole('button', { name: 'Corregir' }).click(); // without a reason
   await expect(dialogo).toContainText('Escribí el motivo (mínimo 5 caracteres).');
@@ -238,9 +235,9 @@ test('correcciones: correcting the name of a proveedor needs a reason and the ol
   await dialogo.getByRole('button', { name: 'Corregir' }).click();
 
   await expect(page.getByRole('heading', { name: `${proveedor.nombre} S.A.` })).toBeVisible();
-  await page.getByRole('button', { name: 'Historial' }).click();
-  await expect(page.getByRole('dialog')).toContainText('Motivo: Nombre mal escrito');
-  await expect(page.getByRole('dialog')).toContainText(`Nombre: ${proveedor.nombre} → ${proveedor.nombre} S.A.`);
+  const historialProveedor = await abrirDialogo(page.getByRole('button', { name: 'Historial' }));
+  await expect(historialProveedor).toContainText('Motivo: Nombre mal escrito');
+  await expect(historialProveedor).toContainText(`Nombre: ${proveedor.nombre} → ${proveedor.nombre} S.A.`);
 });
 
 test('correcciones: Oficina and Consulta see no way to correct, void or deactivate, and the server refuses it', async ({ request, browser }) => {

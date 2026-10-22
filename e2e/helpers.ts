@@ -26,12 +26,57 @@ function adminPassword(): string {
   return password;
 }
 
+const DIALOGOS = '[role="dialog"], [role="alertdialog"]';
+
 /**
- * Fills a field and checks that the value stuck. With tracing on, a fill typed right after a Material dialog
- * opens was lost now and then (a different field each time), so retry until the value is really there.
+ * Waits until the dialog on screen (the last one opened) is ready to be typed into: its opening animation is over and the focus is
+ * inside it. On a slow CI runner a fill into the second field of a freshly opened dialog once ended up in the first one (the focus was
+ * not where the test expected it; the app moves it only once, when the dialog opens, see dialogos.spec.ts). Returns at once when no
+ * dialog is open.
+ */
+export async function esperarDialogoListo(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate((selector) => {
+          const dialogo = Array.from(document.querySelectorAll<HTMLElement>(selector)).pop();
+          if (!dialogo) {
+            return true;
+          }
+          const animando = dialogo
+            .getAnimations({ subtree: true })
+            .some((animacion) => animacion.effect?.getComputedTiming().iterations !== Infinity);
+          return dialogo.contains(document.activeElement) && !animando;
+        }, DIALOGOS),
+      { message: 'the dialog never got ready (animation over and the focus inside it)', timeout: 10_000 },
+    )
+    .toBe(true);
+}
+
+/**
+ * Opens a dialog by clicking its opener and returns it once it is ready (see esperarDialogoListo). Every test that opens a dialog goes
+ * through here, so none of them has to remember the wait.
+ */
+export async function abrirDialogo(abrir: Locator): Promise<Locator> {
+  const page = abrir.page();
+  await abrir.click();
+  const dialogo = page.getByRole('dialog').or(page.getByRole('alertdialog'));
+  await expect(dialogo).toBeVisible();
+  await esperarDialogoListo(page);
+  return dialogo;
+}
+
+/**
+ * Fills a field and checks that the value stuck. With tracing on, a fill typed right after a Material dialog opened was lost now and
+ * then (a different field each time). The fill waits for any open dialog to be ready first, and a retry never types on top of what an
+ * earlier attempt left: the field must be focused, and it is cleared before it is filled again.
  */
 export async function rellenar(campo: Locator, valor: string): Promise<void> {
+  await esperarDialogoListo(campo.page());
   await expect(async () => {
+    await campo.focus();
+    await expect(campo).toBeFocused({ timeout: 1_000 });
+    await campo.clear();
     await campo.fill(valor);
     await expect(campo).toHaveValue(valor, { timeout: 1_000 });
   }).toPass({ timeout: 10_000 });
@@ -54,9 +99,9 @@ export async function loginYEsperarInicio(page: Page): Promise<void> {
 export async function crearProveedor(page: Page): Promise<string> {
   const nombre = nombreUnico();
   await page.getByRole('link', { name: 'Proveedores' }).click();
-  await page.getByRole('button', { name: 'Nuevo proveedor' }).click();
-  await rellenar(page.getByRole('dialog').getByLabel('Nombre'), nombre);
-  await page.getByRole('dialog').getByRole('button', { name: 'Crear' }).click();
+  const dialogo = await abrirDialogo(page.getByRole('button', { name: 'Nuevo proveedor' }));
+  await rellenar(dialogo.getByLabel('Nombre'), nombre);
+  await dialogo.getByRole('button', { name: 'Crear' }).click();
   await page.getByRole('link', { name: new RegExp(nombre) }).click();
   await expect(page.getByRole('heading', { name: nombre })).toBeVisible();
   return nombre;
