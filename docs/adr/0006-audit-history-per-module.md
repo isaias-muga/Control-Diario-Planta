@@ -1,6 +1,7 @@
 # ADR 0006: Audit columns and change history belong to each module; no foreign keys between module schemas
 
-- **Status:** proposed
+- **Status:** accepted
+- **Accepted at control 2:** see docs/modulos.md, section 4 (approval line by Isaías Muga, 2026-10-21)
 - **Date:** 2026-10-21
 - **Decided by:** Isaías Muga (tech lead), pending approval at control 2
 - **Module(s):** Kernel, Identidad, Recepción, Producción
