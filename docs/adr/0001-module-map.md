@@ -1,6 +1,7 @@
 # ADR 0001: Module map: Kernel, Identidad, Recepción and a future Producción
 
-- **Status:** proposed
+- **Status:** accepted
+- **Accepted at control 2:** see docs/modulos.md, section 4 (approval line by Isaías Muga, 2026-10-21)
 - **Date:** 2026-10-21
 - **Decided by:** Isaías Muga (tech lead), pending approval at control 2
 - **Module(s):** company

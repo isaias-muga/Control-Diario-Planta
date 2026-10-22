@@ -1,6 +1,7 @@
 # ADR 0007: Silos and quality limits stay in Recepción; Producción asks through a reserved contract
 
-- **Status:** proposed
+- **Status:** accepted
+- **Accepted at control 2:** see docs/modulos.md, section 4 (approval line by Isaías Muga, 2026-10-21)
 - **Date:** 2026-10-21
 - **Decided by:** Isaías Muga (tech lead), pending approval at control 2
 - **Module(s):** Recepción, Producción
