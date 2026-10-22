@@ -337,14 +337,13 @@ test.describe('Admin: users and operarios', () => {
     await rellenar(dialogoOperario.getByLabel('Nombre'), `E2E Operario ${sufijo}`);
     // Only active operarios must have different PINs and the database keeps the ones of earlier runs: on a clash (409) the dialog stays
     // open, so try another PIN, as crearOperarioPorApi does.
-    for (let intento = 0; intento < 5; intento++) {
-      await rellenar(dialogoOperario.getByLabel('PIN'), String(Math.floor(1000 + Math.random() * 9000)));
+    let creado = false;
+    for (let intento = 0; intento < 5 && !creado; intento++) {
+      await rellenar(dialogoOperario.getByLabel('PIN'), String(Math.floor(Math.random() * 10_000)).padStart(4, '0'));
       await dialogoOperario.getByRole('button', { name: 'Crear' }).click();
-      const cerrado = await expect(dialogoOperario).toBeHidden({ timeout: 5_000 }).then(() => true, () => false);
-      if (cerrado) {
-        break;
-      }
+      creado = await expect(dialogoOperario).toBeHidden({ timeout: 8_000 }).then(() => true, () => false);
     }
+    expect(creado, 'the operario dialog never closed: the PIN kept clashing or the save failed').toBe(true);
     await expect(page.getByRole('cell', { name: `E2E Operario ${sufijo}`, exact: true })).toBeVisible();
   });
 

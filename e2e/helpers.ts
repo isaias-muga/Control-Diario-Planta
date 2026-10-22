@@ -32,7 +32,7 @@ const DIALOGOS = '[role="dialog"], [role="alertdialog"]';
  * Waits until the dialog on screen (the last one opened) is ready to be typed into: its opening animation is over and the focus is
  * inside it. On a slow CI runner a fill into the second field of a freshly opened dialog once ended up in the first one (the focus was
  * not where the test expected it; the app moves it only once, when the dialog opens, see dialogos.spec.ts). Returns at once when no
- * dialog is open.
+ * dialog is open. Close any overlay panel of the dialog (an open mat-select list) before calling it: the focus is then outside the dialog.
  */
 export async function esperarDialogoListo(page: Page): Promise<void> {
   await expect
@@ -60,7 +60,8 @@ export async function esperarDialogoListo(page: Page): Promise<void> {
 export async function abrirDialogo(abrir: Locator): Promise<Locator> {
   const page = abrir.page();
   await abrir.click();
-  const dialogo = page.getByRole('dialog').or(page.getByRole('alertdialog'));
+  // .last(): the previous dialog can still be leaving while the next one opens
+  const dialogo = page.getByRole('dialog').or(page.getByRole('alertdialog')).last();
   await expect(dialogo).toBeVisible();
   await esperarDialogoListo(page);
   return dialogo;
@@ -73,10 +74,14 @@ export async function abrirDialogo(abrir: Locator): Promise<Locator> {
  */
 export async function rellenar(campo: Locator, valor: string): Promise<void> {
   await esperarDialogoListo(campo.page());
+  let reintento = false;
   await expect(async () => {
     await campo.focus();
     await expect(campo).toBeFocused({ timeout: 1_000 });
-    await campo.clear();
+    if (reintento) {
+      await campo.clear();
+    }
+    reintento = true;
     await campo.fill(valor);
     await expect(campo).toHaveValue(valor, { timeout: 1_000 });
   }).toPass({ timeout: 10_000 });
