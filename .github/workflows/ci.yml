@@ -99,7 +99,7 @@ jobs:
         working-directory: e2e
         env:
           E2E_API_LATENCY_MS: "400"
-        run: npx playwright test carga-rapida roles correcciones cuentas-protegidas
+        run: npx playwright test carga-rapida roles correcciones cuentas-protegidas dialogos
 
       - name: Upload Playwright report
         if: failure()

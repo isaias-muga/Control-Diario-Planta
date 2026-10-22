@@ -7,6 +7,7 @@ import {
   crearUsuarioListoPorApi,
   crearUsuarioPorApi,
   loginComo,
+  abrirDialogo,
   rellenar,
   type PersonaDePrueba,
 } from '../helpers';
@@ -94,8 +95,7 @@ test.describe('reactivar y historial de usuarios', () => {
     await expect(fila).toBeVisible();
 
     // Deactivate: the reason is mandatory
-    await fila.getByRole('button', { name: `Desactivar a ${persona.username}` }).click();
-    const dialogo = page.getByRole('dialog');
+    const dialogo = await abrirDialogo(fila.getByRole('button', { name: `Desactivar a ${persona.username}` }));
     await dialogo.getByRole('button', { name: 'Desactivar' }).click();
     await expect(dialogo).toContainText('Escribí el motivo');
     await rellenar(dialogo.getByLabel('Motivo'), 'Dejó la empresa');
@@ -106,9 +106,9 @@ test.describe('reactivar y historial de usuarios', () => {
     expect((await request.post('/api/Auth/login', { data: { username: persona.username, password: PASSWORD_PROPIA } })).status()).toBe(401);
 
     // Reactivate
-    await fila.getByRole('button', { name: `Reactivar a ${persona.username}` }).click();
-    await rellenar(page.getByRole('dialog').getByLabel('Motivo'), 'Volvió a trabajar');
-    await page.getByRole('dialog').getByRole('button', { name: 'Reactivar' }).click();
+    const dialogoReactivar = await abrirDialogo(fila.getByRole('button', { name: `Reactivar a ${persona.username}` }));
+    await rellenar(dialogoReactivar.getByLabel('Motivo'), 'Volvió a trabajar');
+    await dialogoReactivar.getByRole('button', { name: 'Reactivar' }).click();
     await expect(fila.getByText('Contraseña pendiente')).toBeVisible();
 
     // It logs in again, but everything is refused until it chooses a password of its own
@@ -119,8 +119,7 @@ test.describe('reactivar y historial de usuarios', () => {
     expect((await request.get('/api/Proveedores', { headers: { Authorization: `Bearer ${token}` } })).status()).toBe(403);
 
     // The history says who, when and why, newest first
-    await fila.getByRole('button', { name: `Ver el historial de ${persona.username}` }).click();
-    const historial = page.getByRole('dialog');
+    const historial = await abrirDialogo(fila.getByRole('button', { name: `Ver el historial de ${persona.username}` }));
     await expect(historial.getByRole('heading', { name: `Historial de ${persona.username}` })).toBeVisible();
     await expect(historial.getByText('Motivo: Volvió a trabajar')).toBeVisible();
     await expect(historial.getByText('Motivo: Dejó la empresa')).toBeVisible();
@@ -134,16 +133,14 @@ test.describe('reactivar y historial de usuarios', () => {
     await irAUsuarios(page);
     const fila = page.getByRole('row', { name: new RegExp(persona.username) });
 
-    await fila.getByRole('button', { name: `Cambiar el rol de ${persona.username}` }).click();
-    const dialogo = page.getByRole('dialog');
+    const dialogo = await abrirDialogo(fila.getByRole('button', { name: `Cambiar el rol de ${persona.username}` }));
     await dialogo.getByRole('combobox', { name: /Rol nuevo/ }).click();
     await page.getByRole('option', { name: 'Consulta (solo lectura)' }).click();
     await rellenar(dialogo.getByLabel('Motivo'), 'Pasa a solo lectura');
     await dialogo.getByRole('button', { name: 'Cambiar rol' }).click();
     await expect(fila.getByText('Consulta (solo lectura)')).toBeVisible();
 
-    await fila.getByRole('button', { name: `Ver el historial de ${persona.username}` }).click();
-    const historial = page.getByRole('dialog');
+    const historial = await abrirDialogo(fila.getByRole('button', { name: `Ver el historial de ${persona.username}` }));
     await expect(historial.getByText('Motivo: Pasa a solo lectura')).toBeVisible();
     await expect(historial.getByText('Rol:').first()).toBeVisible();
     await expect(historial.getByText('Oficina').first()).toBeVisible();
@@ -174,18 +171,17 @@ test.describe('operarios: reactivar y historial', () => {
     await irAUsuarios(page);
     const fila = page.getByRole('row', { name: new RegExp(operario.nombre) });
 
-    await fila.getByRole('button', { name: `Desactivar a ${operario.nombre}` }).click();
-    await rellenar(page.getByRole('dialog').getByLabel('Motivo'), 'Dejó de trabajar');
-    await page.getByRole('dialog').getByRole('button', { name: 'Desactivar' }).click();
+    const dialogoDesactivar = await abrirDialogo(fila.getByRole('button', { name: `Desactivar a ${operario.nombre}` }));
+    await rellenar(dialogoDesactivar.getByLabel('Motivo'), 'Dejó de trabajar');
+    await dialogoDesactivar.getByRole('button', { name: 'Desactivar' }).click();
     await expect(fila.getByText('Desactivado')).toBeVisible();
 
-    await fila.getByRole('button', { name: `Reactivar a ${operario.nombre}` }).click();
-    await rellenar(page.getByRole('dialog').getByLabel('Motivo'), 'Volvió a trabajar');
-    await page.getByRole('dialog').getByRole('button', { name: 'Reactivar' }).click();
+    const dialogoReactivarOperario = await abrirDialogo(fila.getByRole('button', { name: `Reactivar a ${operario.nombre}` }));
+    await rellenar(dialogoReactivarOperario.getByLabel('Motivo'), 'Volvió a trabajar');
+    await dialogoReactivarOperario.getByRole('button', { name: 'Reactivar' }).click();
     await expect(fila.getByRole('button', { name: `Cambiar el PIN de ${operario.nombre}` })).toBeVisible();
 
-    await fila.getByRole('button', { name: `Ver el historial de ${operario.nombre}` }).click();
-    const historial = page.getByRole('dialog');
+    const historial = await abrirDialogo(fila.getByRole('button', { name: `Ver el historial de ${operario.nombre}` }));
     await expect(historial.getByText('Motivo: Volvió a trabajar')).toBeVisible();
     await expect(historial.getByText('Motivo: Dejó de trabajar')).toBeVisible();
     await expect(historial.getByText('Motivo: Alta de operario')).toBeVisible();

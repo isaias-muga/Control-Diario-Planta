@@ -10,6 +10,7 @@ import {
   irAConfiguracion,
   loginComo,
   loginYEsperarInicio,
+  abrirDialogo,
   rellenar,
   ticketUnico,
 } from '../helpers';
@@ -317,8 +318,7 @@ test.describe('Admin: users and operarios', () => {
     const sufijo = Date.now().toString(36);
     const username = `e2e.ui.${sufijo}`;
 
-    await page.getByRole('button', { name: 'Nuevo usuario' }).click();
-    const dialogo = page.getByRole('dialog');
+    const dialogo = await abrirDialogo(page.getByRole('button', { name: 'Nuevo usuario' }));
     await rellenar(dialogo.getByLabel('Usuario'), username);
     await rellenar(dialogo.getByLabel('Nombre'), `E2E Persona ${sufijo}`);
     await dialogo.getByRole('combobox', { name: 'Rol' }).click();
@@ -333,11 +333,17 @@ test.describe('Admin: users and operarios', () => {
     await expect(otra).toHaveURL(/\/cambiar-password$/);
     await otra.close();
 
-    await page.getByRole('button', { name: 'Nuevo operario' }).click();
-    const dialogoOperario = page.getByRole('dialog');
+    const dialogoOperario = await abrirDialogo(page.getByRole('button', { name: 'Nuevo operario' }));
     await rellenar(dialogoOperario.getByLabel('Nombre'), `E2E Operario ${sufijo}`);
-    await rellenar(dialogoOperario.getByLabel('PIN'), String(1000 + (Date.now() % 9000)));
-    await dialogoOperario.getByRole('button', { name: 'Crear' }).click();
+    // Only active operarios must have different PINs and the database keeps the ones of earlier runs: on a clash (409) the dialog stays
+    // open, so try another PIN, as crearOperarioPorApi does.
+    let creado = false;
+    for (let intento = 0; intento < 5 && !creado; intento++) {
+      await rellenar(dialogoOperario.getByLabel('PIN'), String(Math.floor(Math.random() * 10_000)).padStart(4, '0'));
+      await dialogoOperario.getByRole('button', { name: 'Crear' }).click();
+      creado = await expect(dialogoOperario).toBeHidden({ timeout: 8_000 }).then(() => true, () => false);
+    }
+    expect(creado, 'the operario dialog never closed: the PIN kept clashing or the save failed').toBe(true);
     await expect(page.getByRole('cell', { name: `E2E Operario ${sufijo}`, exact: true })).toBeVisible();
   });
 
