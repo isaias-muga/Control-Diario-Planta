@@ -1,68 +1,222 @@
 name: CI
 
+# The three jobs (build-test, client, e2e) are required checks of the ruleset, so every one of them always starts and reports. What a run skips
+# is decided INSIDE each job (step "Decide whether to run"); a workflow-level `paths` filter is never used, because a required check that is
+# not reported leaves the PR blocked forever. See CLAUDE.md, Git workflow.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
 
 permissions:
   contents: read
 
+# One run per PR: a new push cancels the older one. Never on main, where every push to the branch must finish.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Skips the work when only non-code files changed (docs, templates). The same script is in the three jobs.
+      - name: Decide whether to run
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          SKIP_DRAFT: "false"
+        run: |
+          set -euo pipefail
+          is_doc() {
+            case "$1" in
+              *.md|docs/*|.github/ISSUE_TEMPLATE/*|.github/pull_request_template.md|LICENSE|.gitignore) return 0 ;;
+            esac
+            return 1
+          }
+          run=true
+          reason="code changed"
+          if [ "$SKIP_DRAFT" = "true" ] && [ "$DRAFT" = "true" ]; then
+            run=false
+            reason="draft pull request"
+          else
+            # A pull request is checked out as a merge commit whose first parent is the base: HEAD^1..HEAD is what the PR changes.
+            # A push to main is compared with the previous tip (for a merge commit that is HEAD^1), or HEAD^1 if that is unknown.
+            base=""
+            if [ "$EVENT" != "pull_request" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+              base="$BEFORE"
+            else
+              base="$(git rev-parse --verify --quiet HEAD^1 || true)"
+            fi
+            if [ -n "$base" ]; then
+              only_docs=true
+              while IFS= read -r f; do
+                if ! is_doc "$f"; then only_docs=false; break; fi
+              done < <(git diff --name-only --no-renames "$base" HEAD)
+              if [ "$only_docs" = "true" ]; then
+                run=false
+                reason="only non-code files changed"
+              fi
+            fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "::notice::run=$run ($reason)"
 
       - uses: actions/setup-dotnet@v6
+        if: steps.plan.outputs.run == 'true'
         with:
           dotnet-version: 10.0.x
 
       - name: Restore
+        if: steps.plan.outputs.run == 'true'
         run: dotnet restore DairyControl.slnx
 
       - name: Build
+        if: steps.plan.outputs.run == 'true'
         run: dotnet build DairyControl.slnx --no-restore --configuration Release
 
       - name: Test
+        if: steps.plan.outputs.run == 'true'
         run: dotnet test --solution DairyControl.slnx --no-build --configuration Release
 
   client:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: client
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether to run
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          SKIP_DRAFT: "false"
+        run: |
+          set -euo pipefail
+          is_doc() {
+            case "$1" in
+              *.md|docs/*|.github/ISSUE_TEMPLATE/*|.github/pull_request_template.md|LICENSE|.gitignore) return 0 ;;
+            esac
+            return 1
+          }
+          run=true
+          reason="code changed"
+          if [ "$SKIP_DRAFT" = "true" ] && [ "$DRAFT" = "true" ]; then
+            run=false
+            reason="draft pull request"
+          else
+            # A pull request is checked out as a merge commit whose first parent is the base: HEAD^1..HEAD is what the PR changes.
+            # A push to main is compared with the previous tip (for a merge commit that is HEAD^1), or HEAD^1 if that is unknown.
+            base=""
+            if [ "$EVENT" != "pull_request" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+              base="$BEFORE"
+            else
+              base="$(git rev-parse --verify --quiet HEAD^1 || true)"
+            fi
+            if [ -n "$base" ]; then
+              only_docs=true
+              while IFS= read -r f; do
+                if ! is_doc "$f"; then only_docs=false; break; fi
+              done < <(git diff --name-only --no-renames "$base" HEAD)
+              if [ "$only_docs" = "true" ]; then
+                run=false
+                reason="only non-code files changed"
+              fi
+            fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "::notice::run=$run ($reason)"
 
       - uses: actions/setup-node@v7
+        if: steps.plan.outputs.run == 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: client/package-lock.json
 
       - name: Install
+        if: steps.plan.outputs.run == 'true'
+        working-directory: client
         run: npm ci
 
       - name: Build
+        if: steps.plan.outputs.run == 'true'
+        working-directory: client
         run: npm run build
 
       - name: Test
+        if: steps.plan.outputs.run == 'true'
+        working-directory: client
         run: npm test -- --no-watch
 
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # Fixed so the images built below (cdf-api, cdf-client) are the ones `docker compose up` looks for
+      COMPOSE_PROJECT_NAME: cdf
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # The e2e job also skips draft pull requests: it runs on ready_for_review and on every push to a non-draft PR.
+      - name: Decide whether to run
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          SKIP_DRAFT: "true"
+        run: |
+          set -euo pipefail
+          is_doc() {
+            case "$1" in
+              *.md|docs/*|.github/ISSUE_TEMPLATE/*|.github/pull_request_template.md|LICENSE|.gitignore) return 0 ;;
+            esac
+            return 1
+          }
+          run=true
+          reason="code changed"
+          if [ "$SKIP_DRAFT" = "true" ] && [ "$DRAFT" = "true" ]; then
+            run=false
+            reason="draft pull request"
+          else
+            # A pull request is checked out as a merge commit whose first parent is the base: HEAD^1..HEAD is what the PR changes.
+            # A push to main is compared with the previous tip (for a merge commit that is HEAD^1), or HEAD^1 if that is unknown.
+            base=""
+            if [ "$EVENT" != "pull_request" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+              base="$BEFORE"
+            else
+              base="$(git rev-parse --verify --quiet HEAD^1 || true)"
+            fi
+            if [ -n "$base" ]; then
+              only_docs=true
+              while IFS= read -r f; do
+                if ! is_doc "$f"; then only_docs=false; break; fi
+              done < <(git diff --name-only --no-renames "$base" HEAD)
+              if [ "$only_docs" = "true" ]; then
+                run=false
+                reason="only non-code files changed"
+              fi
+            fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "::notice::run=$run ($reason)"
 
       # Throwaway secrets for this run only; nothing here is a real credential.
       - name: Create .env
+        if: steps.plan.outputs.run == 'true'
         run: |
           {
             echo "MSSQL_SA_PASSWORD=Ci_$(openssl rand -hex 12)_aA1"
@@ -71,31 +225,71 @@ jobs:
             echo "PIN_SECRET=$(openssl rand -hex 32)"
           } > .env
 
+      - uses: docker/setup-buildx-action@v4
+        if: steps.plan.outputs.run == 'true'
+
+      # The images are built with Buildx and the GitHub Actions cache (one scope per image); compose then only starts them.
+      - name: Build the images
+        if: steps.plan.outputs.run == 'true'
+        uses: docker/bake-action@v7
+        with:
+          files: compose.yaml
+          targets: api,client
+          load: true
+          set: |
+            api.tags=cdf-api:latest
+            api.cache-from=type=gha,scope=api
+            api.cache-to=type=gha,scope=api,mode=max
+            client.tags=cdf-client:latest
+            client.cache-from=type=gha,scope=client
+            client.cache-to=type=gha,scope=client,mode=max
+
       - name: Start the stack
-        run: docker compose up -d --build
+        if: steps.plan.outputs.run == 'true'
+        run: docker compose up -d --no-build
 
       - name: Wait for the API health
+        if: steps.plan.outputs.run == 'true'
         run: curl --fail --silent --show-error --retry 90 --retry-delay 2 --retry-all-errors --retry-connrefused http://localhost:8080/health
 
       - uses: actions/setup-node@v7
+        if: steps.plan.outputs.run == 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: e2e/package-lock.json
 
+      # The browser download is cached by the Playwright version (the lockfile); the system libraries are not part of it
+      - name: Cache the Playwright browsers
+        if: steps.plan.outputs.run == 'true'
+        id: browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
+
       - name: Install
+        if: steps.plan.outputs.run == 'true'
         working-directory: e2e
+        env:
+          BROWSERS_CACHED: ${{ steps.browsers.outputs.cache-hit }}
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          if [ "$BROWSERS_CACHED" = "true" ]; then
+            npx playwright install-deps chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
 
       - name: Run e2e tests
+        if: steps.plan.outputs.run == 'true'
         working-directory: e2e
         run: npx playwright test
 
       # The race detector: CI is slower than a developer machine, and a test that acts on a control before its data has arrived passes by
       # luck. Every /api response is delayed; add here the specs of any flow that loads data when its page opens (see CLAUDE.md, E2E tests).
       - name: Run the data-loading flows with a slow API
+        if: steps.plan.outputs.run == 'true'
         working-directory: e2e
         env:
           E2E_API_LATENCY_MS: "400"
@@ -120,5 +314,5 @@ jobs:
           echo "::endgroup::"
 
       - name: Stop the stack
-        if: always()
+        if: always() && steps.plan.outputs.run == 'true'
         run: docker compose down -v
