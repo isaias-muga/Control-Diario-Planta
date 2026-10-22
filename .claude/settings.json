@@ -31,7 +31,10 @@
       "Bash(git push * -f *)",
       "Bash(git push --delete*)",
       "Bash(git push * --delete*)",
-      "Bash(git push * :*)",
+      "Bash(git push -d*)",
+      "Bash(git push * -d)",
+      "Bash(git push * -d *)",
+      "Bash(git push * :**)",
       "Bash(git reset --hard*)",
       "Bash(git -C * reset --hard*)",
 
@@ -65,7 +68,10 @@
       "PowerShell(git push * -f *)",
       "PowerShell(git push --delete*)",
       "PowerShell(git push * --delete*)",
-      "PowerShell(git push * :*)",
+      "PowerShell(git push -d*)",
+      "PowerShell(git push * -d)",
+      "PowerShell(git push * -d *)",
+      "PowerShell(git push * :**)",
       "PowerShell(git reset --hard*)",
       "PowerShell(git -C * reset --hard*)"
     ]
