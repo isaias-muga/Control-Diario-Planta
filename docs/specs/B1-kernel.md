@@ -41,7 +41,7 @@ Creates three new projects and their tests. **Touches no existing project** (the
 
 All three are added to `DairyControl.slnx`. `Directory.Build.props` applies (nullable, warnings as errors). `DairyControl.Kernel.Persistence` is **not** created here (B1b).
 
-### Signatures (the code is copied from the current file; names in `docs/contratos/kernel.md` win where it differs, see "Open decisions")
+### Signatures (the code is copied from the current file; names in `docs/contratos/kernel.md` win where it differs, see "Decisions taken")
 
 ```csharp
 namespace DairyControl.Kernel;
@@ -201,7 +201,7 @@ For each of the five types, in the same PR: every `using` and reference of the m
 ## Issue B1-5: adopt `CambioRegistrado` from the Kernel and split `Campos`
 
 - Delete `src/DairyControl.Domain/Entities/CambioRegistrado.cs` and `tests/DairyControl.Domain.Tests/CambioRegistradoTests.cs` (covered by K1 to K5 of B1-1; move any missing case). Domain, Application and Infrastructure use `DairyControl.Kernel.Auditing.CambioRegistrado`, and every call to `CambioRegistrado.Crear(...)` becomes `CambioRegistrado.Registrar(...)` (same arguments).
-- The entity names and field names become constants of two new classes in the monolith's Domain (location in "Open decisions"): `RecepcionCampos` (`EntidadRecepcion = "Recepcion"`, `EntidadProveedor = "Proveedor"`, and the fields `proveedor, litros, grasa, acidez, temperatura, agua, silo, ticket, fechaHora, observaciones, anulacion, nombre, activo`) and `IdentidadCampos` (`EntidadUsuario = "Usuario"`, `EntidadOperario = "Operario"`, and the fields `nombre, activo, alta, rol, password, pin`). Every value is exactly the string used today, so no history row changes.
+- The entity names and field names become constants of two new classes in the monolith's Domain (location in "Decisions taken"): `RecepcionCampos` (`EntidadRecepcion = "Recepcion"`, `EntidadProveedor = "Proveedor"`, and the fields `proveedor, litros, grasa, acidez, temperatura, agua, silo, ticket, fechaHora, observaciones, anulacion, nombre, activo`) and `IdentidadCampos` (`EntidadUsuario = "Usuario"`, `EntidadOperario = "Operario"`, and the fields `nombre, activo, alta, rol, password, pin`). Every value is exactly the string used today, so no history row changes.
 - `CambioRegistradoConfiguration` keeps the table and columns; `Entidad` uses `CambioRegistrado.EntidadMaxLength` (20, today the literal `HasMaxLength(20)`). The B1-2 guard must stay green.
 - **Tests:** every existing correction and history test passes unchanged; new Domain test `RecepcionCampos_Constantes_SonLasDeHoy` and `IdentidadCampos_Constantes_SonLasDeHoy` asserting the strings above; an Infrastructure test that a `CambioRegistrado` with `Entidad = "Produccion"` is saved and read back (no list of names in the Kernel).
 - **Files touched:** the deleted entity and test, the two new constant classes, `CambioRegistradoConfiguration.cs`, every file that names `CambioRegistrado.Campos` or `CambioRegistrado.Entidad*` (entities, `RecepcionAppService`, `ProveedorCambiosAppService`, `UsuarioAppService`, `OperarioAppService`, `HistorialQueries`, `DemoDataSeeder`, tests). **Not touched:** migrations, the history table, DTOs.
@@ -236,7 +236,7 @@ For each of the five types, in the same PR: every `using` and reference of the m
 
 HTTP statuses and bodies, error messages, table and column names, the history rows already stored, JWT claims and their values, policy names, client behavior.
 
-## Decisions taken by following the contract document (the tech lead confirms or overrules them)
+## Decisions taken (following the contract document, and the tech lead's answers)
 
 Where `docs/contratos/kernel.md` and the current code differ, this spec follows the document, because it is the approved contract:
 
@@ -246,8 +246,11 @@ Where `docs/contratos/kernel.md` and the current code differ, this spec follows 
 4. `UsuarioActualFijo` has the constructor above (the document only says "fixed `IUsuarioActual`").
 5. `HoraPlanta` and `MotivoDeCambio` live in the namespace `DairyControl.Kernel` (the block they are listed under).
 
-## Open decisions (gaps in the approved documents; the issue that depends on each one cannot pass inspection until the tech lead answers)
+6. (Tech lead, confirmed) `CambioRegistrado.Registrar`, `MotivoCambioDto.Motivo` as `string = ""` and `dcp` outside `Claims` follow the contract document as written above; no contract change.
+7. (Tech lead) `RecepcionCampos` and `IdentidadCampos` live in `src/DairyControl.Domain/Campos/` (namespace `DairyControl.Domain.Campos`) while the module projects do not exist.
+8. (Tech lead) The host class `ApiErrors` (`DairyControl.Api.Validation`) keeps its name next to `DairyControl.Kernel.Contracts.ApiErrors`; the namespaces tell them apart.
+9. (Tech lead) The constructors of `ConflictoDeUnicidadException` and `DemasiadosIntentosException` are copied unchanged from the current files.
 
-1. **B1-5:** where `RecepcionCampos` and `IdentidadCampos` live while the module projects do not exist is not defined in any approved document. The issue (#31) places them in `src/DairyControl.Domain/Campos/` (namespace `DairyControl.Domain.Campos`) as the planner's choice; the tech lead confirms or changes it.
-2. **B1-6:** the host keeps a class named `ApiErrors` (`DairyControl.Api.Validation`) next to `DairyControl.Kernel.Contracts.ApiErrors`; is the name clash acceptable or should the host class be renamed?
-3. **B1-1:** `ConflictoDeUnicidadException` and `DemasiadosIntentosException` constructors are described as "unchanged"; the builder copies them from the current files.
+## Open decisions
+
+None.

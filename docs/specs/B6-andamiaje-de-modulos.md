@@ -23,12 +23,12 @@ Everything a new module needs from the host, so its owner touches only `src/<Mod
 | B6-4 | `[Host] Variante de CI con el módulo encendido` | B6-3 |
 | B6-5 | `[Host] CODEOWNERS base y guía "Cómo se agrega un módulo"` | B6-4 |
 
-**Every issue of this milestone depends on the answer to the first open decision at the end of this file** (shared types that no approved contract defines). Until it is answered B6-1 to B6-3 cannot be built as written.
+The tech lead answered the open decisions of this milestone; they are listed in "Decisions taken by the tech lead" at the end of this file and are used below. No contract changes: Kernel 1.0.0 and Kernel.Persistence stay as approved.
 
 ## Issue B6-1: registration, switch and `GET /api/Modulos`
 
 - **Registration list:** the host (`Program.cs`) holds one list of optional modules, each entry `(Nombre, Habilitado?, AddMethod)`. Today the list is empty. For each entry the host reads `Modules:<Nombre>:Enabled` with default `false` (`appsettings.json` gets no entry; the key exists only where an environment sets it) and, when true, calls the module's `Add<Nombre>()` (ADR 0003). A module that is off registers **no services, no controllers (application part), no `DbContext`, no migration step and no health check**.
-- **Endpoint:** `ModulosController` in the host, `[Route("api/[controller]")]`, `GET /api/Modulos`, `[Authorize(Policy = Politicas.Autenticado)]` (not anonymous), answers 200 with the names of the enabled optional modules. Identidad and Recepción are not in the answer. With the empty list it answers an empty collection. (The shape and the casing of the names are in "Open decisions".) A user that must change the password gets the existing 403 `debeCambiarPassword`.
+- **Endpoint:** `ModulosController` in the host, `[Route("api/[controller]")]`, `GET /api/Modulos`, `[Authorize(Policy = Politicas.Autenticado)]` (not anonymous), answers 200 with the names of the enabled optional modules. Identidad and Recepción are not in the answer. With the empty list it answers an empty collection. The answer is a JSON array of strings with the module names exactly as written in the host list, for example `["Produccion"]`. A user that must change the password gets the existing 403 `debeCambiarPassword`.
 - **Authorization matrix:** one new row in `tests/DairyControl.Api.Tests/AutorizacionTests.cs`: `GET /api/Modulos` allowed to `Admin`, `Oficina`, `Recepcion` and `Consulta`; without a token 401.
 - **Tests:**
 
@@ -49,7 +49,7 @@ Everything a new module needs from the host, so its owner touches only `src/<Mod
 ## Issue B6-2: startup keys per module and health per context
 
 - **Startup keys:** `ConfiguracionDeArranque.Validar` checks the keys of each **enabled** optional module (a module that is off adds none). A module declares its keys (name and minimum length, or "must not be empty") and the host's list entry carries them. Messages follow the existing ones: `Falta <clave>: ...` and `<clave> es demasiado corto: ...`, never a value. Logged as Critical by `ExigirValida`, one line per problem. Test case, with a fake module `Falso` that requires `Falso:Secreto` (at least 16 characters): disabled -> no problem; enabled and missing -> `Falta Falso:Secreto: debe tener al menos 16 caracteres.`; enabled and 10 characters -> `Falso:Secreto es demasiado corto: debe tener al menos 16 caracteres.`; enabled and 16 -> none; the existing four keys behave as today.
-- **Health:** `/health` reports 503 when the database of **any** registered context is unreachable. Today the check is `AddDbContextCheck<AppDbContext>("database")`; each enabled module adds one check for its own context, named after the module (exact registration point in "Open decisions"). The 10 second timeout per check (`HealthEndpoints.CheckTimeout`) applies to every registration, including those added later. `/health/live` stays without any database check. A module that is off adds no check.
+- **Health:** `/health` reports 503 when the database of **any** registered context is unreachable. Today the check is `AddDbContextCheck<AppDbContext>("database")`; each enabled module adds one check for its own context, named after the module (registered by the module's own `Add<Modulo>()`, named after the module in lower case; `AddModuleDbContext` does not register it). The 10 second timeout per check (`HealthEndpoints.CheckTimeout`) applies to every registration, including those added later. `/health/live` stays without any database check. A module that is off adds no check.
 - **Tests:** `ConfiguracionDeArranqueTests` (cases above); `HealthEndpointTests`: with only `AppDbContext`, as today; with a fake module whose check is unhealthy, `/health` is 503 and `/health/live` 200; the timeout applies to the fake registration.
 - **Files touched:** `src/DairyControl.Api/Startup/ConfiguracionDeArranque.cs`, `src/DairyControl.Api/Health/HealthEndpoints.cs`, the host list file of B6-1, the two test classes. **Not touched:** the four existing keys' text, `Program.cs` order of steps (B6-3).
 - **Rule changes** (`CLAUDE.md`):
@@ -59,7 +59,7 @@ Everything a new module needs from the host, so its owner touches only `src/<Mod
 ## Issue B6-3: startup steps in order
 
 - `Program.cs` runs the startup steps as an ordered list, each one through `PasoDeArranque.EjecutarAsync(logger, name, step)`. **Order:** first the legacy steps, in the order and with the names they have today (`aplicar las migraciones`, `crear el primer administrador`, `marcar las cuentas protegidas`, `cargar o reiniciar los datos de demostración`), then the steps of each enabled module in the order of the host list; the last one stays `iniciar el servidor`. The legacy steps keep their conditions (`Database:ApplyMigrationsOnStartup`, `DemoData:*`). A failing step logs Critical `Falló el arranque en el paso: <name>.` and stops, as today.
-- The module side of a step (what a module registers so the host runs it) is in "Open decisions".
+- The step list lives only in the host (`src/DairyControl.Api/Startup`): the host entry of each module carries its ordered steps. No shared type is added to the Kernel (no `IModuleStartupStep` in Kernel 1.0.0).
 - **Tests:** `PasoDeArranqueTests` unchanged; new `OrdenDeArranqueTests`: with two fake modules `A` and `B` enabled and the legacy steps recorded, the executed order is `legacy..., A steps..., B steps..., iniciar el servidor`; a disabled module's steps never run; a failing step of `B` logs Critical with its name, `iniciar el servidor` is not reached; the legacy step names are exactly the four above.
 - **Files touched:** `src/DairyControl.Api/Program.cs`, `src/DairyControl.Api/Startup/*`, the test classes. **Not touched:** what each legacy step does, `DemoDataSeeder`.
 - **Rule changes** (`CLAUDE.md`): "Security", the sentence about `PasoDeArranque`: append `Startup steps run in a fixed order: the legacy ones (migrations, first admin, protected accounts, demo data), then those of each enabled module in the order of the host list.`
@@ -67,12 +67,12 @@ Everything a new module needs from the host, so its owner touches only `src/<Mod
 ## Issue B6-4: CI variant with the module on
 
 - A CI run starts the API tests (and, when the module has them, its rows of the authorization matrix and its e2e) with `Modules__<Modulo>__Enabled=true` for each optional module. `compose.yaml` and `infra/containerapps/*.yaml` are **not** edited: the variant passes the setting to its own run only (ADR 0010 point 3).
-- The workflow reads the modules to turn on from **one list** (its location in "Open decisions"); today the list is empty and the variant is a documented no-op that still reports success, so the job is never "pending" (the CLAUDE.md rule for required checks).
+- The workflow reads the modules to turn on from **one list** (the file `.github/ci-modulos.txt`, one module name per line); today `.github/ci-modulos.txt` is empty and the variant is a documented no-op that still reports success, so the job is never "pending". The variant is not a required check.
 - `FabricaDeApi` can switch a module on (B6-1), which is how the API tests of the variant run.
 - **Tests:** `WorkflowsTests`: the variant exists; it does not filter or skip at workflow level; `compose.yaml` and the production YAML contain no `Modules__` key; the list of modules of the workflow equals the optional modules of the host list (the test fails if one has a module the other lacks); `Ci_RequiredChecks_AlwaysStartAndReport` still passes.
-- **Files touched:** `.github/workflows/ci.yml`, the list file, `tests/DairyControl.ArchitectureTests/WorkflowsTests.cs`. **Not touched:** `deploy-production.yml`, `compose.yaml`, `infra/`.
+- **Files touched:** `.github/workflows/ci.yml`, `.github/ci-modulos.txt` (new, empty), `tests/DairyControl.ArchitectureTests/WorkflowsTests.cs`. **Not touched:** `deploy-production.yml`, `compose.yaml`, `infra/`.
 - **Rule changes** (`CLAUDE.md`):
-  - "E2E tests": append `CI also runs the API tests and the e2e of each optional module with `Modules__<Modulo>__Enabled=true` (list in <file>); the stack of `compose.yaml` does not name a module until it is switched on in that environment.`
+  - "E2E tests": append `CI also runs the API tests and the e2e of each optional module with `Modules__<Modulo>__Enabled=true` (list in `.github/ci-modulos.txt`); the stack of `compose.yaml` does not name a module until it is switched on in that environment.`
   - "Testing": none.
 
 ## Issue B6-5: `CODEOWNERS` base and the guide
@@ -96,10 +96,14 @@ Everything a new module needs from the host, so its owner touches only `src/<Mod
 
 Everything a user sees: with no optional module, the API, the client, the health endpoints and the startup behave as today (same step names and order), and `GET /api/Modulos` is the only new endpoint.
 
-## Open decisions (gaps in the approved documents; they block the issues named)
+## Decisions taken by the tech lead
 
-1. **B6-1, B6-2, B6-3 (blocking):** the plan and ADR 0010 require that the host runs the startup steps of each module in order and that a module declares health and keys, but `docs/contratos/kernel.md` 1.0.0 defines **no shared type for it** (the plan names `IModuleStartupStep` in B3 without a signature). A module `Api` project cannot reference the host, so a shared type is needed. Adding it to the Kernel is a contract change (MINOR, `1.1.0`, needs the owner's `Aprobado`); keeping the list only in the host (a static `Add<Nombre>()` plus keys and steps listed by the host entry) needs no contract but means the host names each module's steps. Which one?
-2. **B6-1:** the response shape and casing of `GET /api/Modulos` (a JSON array of strings? an object?). ADR 0010 says only "returning the names of the enabled modules".
-3. **B6-2:** where a module's health check is registered (by the module's `Add<Modulo>()`, or by `AddModuleDbContext`, which would change the Kernel.Persistence contract) and the check's name.
-4. **B6-4:** where the list of modules for the CI variant lives (a file under `.github/`, a `ci.yml` matrix, or derived from the host list), what the variant does while the list is empty, and whether it is a required check.
-5. **B6-5:** which `CODEOWNERS` lines count as "base" (this spec uses all lines of ADR 0010 point 5 except the client and `e2e/` ones) and the path of the guide (`docs/agregar-un-modulo.md` is this spec's choice).
+1. **B6-1 to B6-3:** the startup steps, keys and registration list live only in the host; no shared type is added to the Kernel. If a later milestone (B3) needs `IModuleStartupStep`, it is proposed then as a MINOR contract change with the owner's `Aprobado`.
+2. **B6-1:** `GET /api/Modulos` answers a JSON array of module names.
+3. **B6-2:** each module's `Add<Modulo>()` registers its health check, named after the module in lower case.
+4. **B6-4:** the variant's list is the file `.github/ci-modulos.txt`; empty means a documented no-op that reports success; it is not a required check.
+5. **B6-5:** the `CODEOWNERS` base is every line of ADR 0010 point 5 except the client and `e2e/` ones; the guide is `docs/agregar-un-modulo.md`.
+
+## Open decisions
+
+None.

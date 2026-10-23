@@ -87,18 +87,23 @@ namespace DairyControl.Kernel.Persistence;
 
 // Reads the history of one entity (newest first, one item per correction) from a DbSet of CambioRegistrado.
 // A module implements its own IHistorialQueries on top of it and adds the existence check of its entities. Returns the shared CorreccionDto.
-public abstract class HistorialQueriesBase { /* GetCorrecciones(DbSet<CambioRegistrado>, string entidad, Guid id): exact signature in "Open decisions" */ }
+public abstract class HistorialQueriesBase
+{
+    // Entries of one entity, newest first, one item per correction. CorreccionDto.Usuario is left null: the module fills it from UsuarioId.
+    public static async Task<IReadOnlyList<(CorreccionDto Correccion, Guid UsuarioId)>> GetCorreccionesAsync(
+        DbSet<CambioRegistrado> historial, string entidad, Guid id);
+}
 
 public static class UnicidadSql { public static bool EsViolacion(DbUpdateException ex); }   // error 2601 / 2627, unchanged
 ```
 
-- **`HistorialQueriesBase`** reproduces the grouping of `src/DairyControl.Infrastructure/Persistence/Queries/HistorialQueries.cs`: the entries of the entity ordered by `EnUtc` descending, one `CorreccionDto` per `CorreccionId` (taking `CorreccionId`, `EnUtc`, `Motivo` from the first entry), whose `Cambios` hold one `CampoCambiadoDto` per entry. It does not read any table of users: how a module puts the name in `CorreccionDto.Usuario` is in "Open decisions".
+- **`HistorialQueriesBase`** reproduces the grouping of `src/DairyControl.Infrastructure/Persistence/Queries/HistorialQueries.cs`: the entries of the entity ordered by `EnUtc` descending, one `CorreccionDto` per `CorreccionId` (taking `CorreccionId`, `EnUtc`, `Motivo` from the first entry), whose `Cambios` hold one `CampoCambiadoDto` per entry. It does not read any table of users: it returns each `CorreccionDto` with `Usuario` null together with the `UsuarioId` of its first entry, and the module sets `Usuario` from its own users (tech lead decision, see "Decisions taken"). `CorreccionDto` is not changed.
 - **`UnicidadSql`** moves from `src/DairyControl.Infrastructure/Persistence/Repositories/UnicidadSql.cs` with `EsNumeroDeUnicidad(int)` and `EsViolacion(DbUpdateException)` (both public, as today). The old file is deleted in B1b-3, which switches its users.
 - **Tests** (`tests/Kernel/DairyControl.Kernel.Tests`):
 
 | # | Case | Input | Expected |
 |---|---|---|---|
-| H1 | One correction, three fields | three entries with the same `CorreccionId` for one entity | one `CorreccionDto` with three `Cambios` |
+| H1 | One correction, three fields | three entries with the same `CorreccionId` for one entity | one item: a `CorreccionDto` with three `Cambios`, `Usuario` null, and the `UsuarioId` of the entries |
 | H2 | Order | two corrections at 10:00 and 11:00 UTC | the 11:00 one first |
 | H3 | Other entities | entries of another `EntidadId` and of another `Entidad` with the same id | not returned |
 | H4 | Nothing recorded | an entity without entries | an empty list |
@@ -115,7 +120,7 @@ public static class UnicidadSql { public static bool EsViolacion(DbUpdateExcepti
 
 - `DairyControl.Infrastructure` gets `ProjectReference`s to `DairyControl.Kernel` and `DairyControl.Kernel.Persistence`.
 - `AppDbContext.OnModelCreating` calls `modelBuilder.MapHistory("dbo")` and **keeps the foreign key** `CambioRegistrado.UsuarioId -> Usuario` (`HasOne<Usuario>().WithMany().HasForeignKey(c => c.UsuarioId).OnDelete(DeleteBehavior.Restrict)`), because it is one of the five cross-module foreign keys that stay until milestone B9 (ADR 0005); the configuration class `CambioRegistradoConfiguration.cs` is deleted.
-- `HistorialQueries` derives from or uses `HistorialQueriesBase` for the grouping, and keeps reading `Usuarios` for the author's name (a listed exception until B4).
+- `HistorialQueries` calls `HistorialQueriesBase.GetCorreccionesAsync` for the grouping and sets `CorreccionDto.Usuario` from `Usuarios` (a listed exception until B4); it keeps the existence check per entity.
 - Every use of `UnicidadSql` points to `DairyControl.Kernel.Persistence.UnicidadSql`; `src/DairyControl.Infrastructure/Persistence/Repositories/UnicidadSql.cs` and `tests/DairyControl.Infrastructure.Tests/UnicidadSqlTests.cs` are deleted.
 - `AddInfrastructure` keeps `AddDbContext<AppDbContext>` as it is. **`AppDbContext` is not registered with `AddModuleDbContext` in fase A**: that would change where the legacy chain keeps its `__EFMigrationsHistory` and is not needed for any other work.
 - **The guard of B1-2 decides.** `MapHistory("dbo")` must leave `HasPendingModelChanges()` false and the existing migrations untouched. If it does not (for example because the snapshot has no explicit schema), the builder stops with `andon` and does not edit a migration or the snapshot.
@@ -135,10 +140,12 @@ public static class UnicidadSql { public static bool EsViolacion(DbUpdateExcepti
 
 The model of `AppDbContext` (checked by the guard), every query result, the history rows, the error numbers treated as unique violations.
 
-## Open decisions (gaps in the approved documents)
+## Decisions taken by the tech lead
 
-1. **B1b-2:** `kernel.md` gives `HistorialQueriesBase { /* GetCorrecciones(DbSet<CambioRegistrado>, string entidad, Guid id) */ }` with no return type, no `static`/instance, no sync or async, and no accessibility. The exact signature is missing.
-2. **B1b-2:** `CorreccionDto` has `Usuario` (a name) and `CambioRegistrado` only the `UsuarioId`; the document does not say how the base fills `Usuario` (a callback, a dictionary parameter, or the module fills it afterwards).
-3. **B1b-1:** the document says `EnableRetryOnFailure` without numbers; this spec uses the ones of `AddInfrastructure` (10 retries, 30 s). Confirm.
-4. **B1b-1:** the document does not say what a bad `schema` or `connectionString` throws; this spec says `ArgumentNullException` for `null` and `InvalidOperationException` for empty. Confirm.
-5. **B1b-1, B1b-2:** the strategy for tests on SQLite with schemas comes from the `Decisión` section of the B0-1 report, which does not exist yet.
+1. **B1b-2:** `HistorialQueriesBase` has the static method `GetCorreccionesAsync` above (it completes the signature that `kernel.md` leaves open; `kernel.md` is not edited). Each item pairs the `CorreccionDto` (with `Usuario` null) with its `UsuarioId`; the module fills the name. `CorreccionDto` and the other Kernel types are unchanged, so Kernel 1.0.0 needs no new approval.
+2. **B1b-1:** `EnableRetryOnFailure` uses the numbers of `AddInfrastructure` (10 retries, 30 s).
+3. **B1b-1:** a `null` `schema` or `connectionString` throws `ArgumentNullException`, an empty or whitespace one `InvalidOperationException`.
+
+## Open decisions
+
+1. **B1b-1, B1b-2:** the strategy for tests on SQLite with schemas comes from the `Decisión` section of the B0-1 report, which does not exist yet (this is a dependency on B0, not a gap).

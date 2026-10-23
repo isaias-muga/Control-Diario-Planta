@@ -39,7 +39,7 @@ Replace the hard-coded four-assembly world of the architecture tests with **disc
 
 - `Proyecto.cs` stops pinning `typeof(Proveedor).Assembly` and the three other assemblies as the only ones; it exposes the discovered projects and `Assembly` per project (`Assembly.Load(name)`), and the existing tests that used `Proyecto.Domain/Application/Infrastructure/Api` run over the discovered projects of the **layer** instead (so the rules also apply to a module that appears later). `FuentesTests.Proyectos` (the list of four folder names) and `FuentesTests` scanning only `src` become the scan of every `.cs` of every project of `src/` **and `tests/`** (never `bin/` or `obj/`), per project.
 - The controllers rule (`AutorizacionTests`: explicit policy, no class-level `[Authorize]`, only `Login` anonymous, no `[HttpDelete]`) runs over the controllers of **every** discovered `*.Api` assembly (today `Types.InAssembly(Proyecto.Api)`).
-- **Guards that make a vacuous rule fail** (constants in one file, `Esperados.cs`, with a comment of the date and what each one counts): the test fails if it finds fewer than `ModulosEsperados` modules (2 today: `Kernel`, `Legado`), fewer than `ProyectosEsperados` projects in `src/` (the number found on the day the issue is built), fewer than `ControladoresEsperados` controllers (**6 on 2026-10-23**: `Auth`, `Configuracion`, `Operarios`, `Proveedores`, `Recepciones`, `Usuarios`; the plan and ADR 0008 say "five" and the code has six, see "Open decisions"), or fewer than `FuentesEsperadas` source files in `src/` and in `tests/`. Raising a minimum is allowed in the PR that adds code; lowering one needs a reason in the PR.
+- **Guards that make a vacuous rule fail** (constants in one file, `Esperados.cs`, with a comment of the date and what each one counts): the test fails if it finds fewer than `ModulosEsperados` modules (2 today: `Kernel`, `Legado`), fewer than `ProyectosEsperados` projects in `src/` (the number found on the day the issue is built), fewer than `ControladoresEsperados` controllers (**6 on 2026-10-23**: `Auth`, `Configuracion`, `Operarios`, `Proveedores`, `Recepciones`, `Usuarios`; the plan and ADR 0008 say "five" and the code has six, see "Decisions taken by the tech lead"), or fewer than `FuentesEsperadas` source files in `src/` and in `tests/`. Raising a minimum is allowed in the PR that adds code; lowering one needs a reason in the PR.
 - No new boundary rule here: B5-1 only changes how the existing rules find their input.
 
 Tests (all in `tests/DairyControl.ArchitectureTests`):
@@ -132,9 +132,12 @@ Files: touches `tests/DairyControl.ArchitectureTests/*.cs` and `ExcepcionesDeFas
 
 Nothing in `src/`. The existing architecture rules keep their meaning; they only gain input.
 
-## Open decisions (gaps in the approved documents)
+## Decisions taken by the tech lead
 
-1. **B5-1:** the plan and ADR 0008 say the API has **5** controllers today; the code has **6** (`AuthController`, `ConfiguracionController`, `OperariosController`, `ProveedoresController`, `RecepcionesController`, `UsuariosController`). This spec uses 6.
-2. **B5-2, B5-3:** ADR 0008 lists exceptions that need two modules (the transitional project referencing both, tests that create an audit user from Identidad's domain). With Legado as one pseudo-module those cannot be detected now. This spec leaves them to B3 and B4 and uses `TablasPorModulo` (not in any approved document) only to make the five foreign keys and the shared history table visible. Confirm both choices.
-3. **B5-2:** the document does not say what the exceptions-list `Cantidad` counts for a reference rule (violating references or violating types). This spec: one violation per offending reference or type, as the rule reports it.
-4. **B5-3:** how to build the model of every `DbContext` found in an `Infrastructure` assembly (a design-time factory, or a constructor taking `DbContextOptions<T>`) is not defined; this spec requires the same technique as `ModeloContraSnapshotTests` (B1-2), which supports only `AppDbContext` today.
+1. **B5-1:** the API has **6** controllers today (the plan and ADR 0008 say 5); this spec uses 6.
+2. **B5-2:** the exceptions-list `Cantidad` counts one violation per offending reference or type, as the rule reports it.
+3. **B5-3:** the model of every `DbContext` found in an `Infrastructure` assembly is built with the technique of `ModeloContraSnapshotTests` (B1-2): the constructor taking `DbContextOptions<T>` with the SQL Server provider, never opened. The negative control is a fake model, so the rule is never empty while only `AppDbContext` exists.
+
+## Open decisions
+
+1. **B5-2, B5-3:** ADR 0008 lists exceptions that need two modules (the transitional project referencing both, tests that create an audit user from Identidad's domain). With Legado as one pseudo-module those cannot be detected now. This spec leaves them to B3 and B4 and uses `TablasPorModulo` (not in any approved document) only to make the five foreign keys and the shared history table visible. The tech lead did not answer this one: it stands as the planner's choice unless the PR review objects.
