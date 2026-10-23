@@ -78,8 +78,10 @@ public class CambioRegistrado
     public const int EntidadMaxLength = 20;
     public const int CampoMaxLength = 50;
     public const int ValorMaxLength = 500;
-    // properties and factory as today (Id, Entidad, EntidadId, CorreccionId, Campo, ValorAnterior, ValorNuevo, UsuarioId, EnUtc, Motivo),
-    // private set, private parameterless constructor.
+    // properties as today (Id, Entidad, EntidadId, CorreccionId, Campo, ValorAnterior, ValorNuevo, UsuarioId, EnUtc, Motivo), private set,
+    // private parameterless constructor. The factory is `public static CambioRegistrado Registrar(string entidad, Guid entidadId, Guid correccionId,
+    // string campo, string? valorAnterior, string? valorNuevo, Guid usuarioId, DateTime enUtc, MotivoDeCambio motivo)`: the name and the
+    // parameters of today's `Crear`, renamed as `docs/contratos/kernel.md` says.
     // Validation of Entidad: not null/whitespace and at most EntidadMaxLength characters, field "entidad" (no list of names).
 }
 ```
@@ -87,7 +89,7 @@ public class CambioRegistrado
 ```csharp
 namespace DairyControl.Kernel.Contracts;
 
-public class MotivoCambioDto { /* as in kernel.md */ }
+public class MotivoCambioDto { public string Motivo { get; set; } = ""; }   // as in kernel.md (today `string? Motivo`; the domain answers the same 400 `motivo` for null and for "")
 public class CampoCambiadoDto { public string Campo { get; set; } = null!; public string? ValorAnterior { get; set; } public string? ValorNuevo { get; set; } }
 public class CorreccionDto { public Guid CorreccionId { get; set; } public DateTime EnUtc { get; set; } public string? Usuario { get; set; } public string Motivo { get; set; } = null!; public List<CampoCambiadoDto> Cambios { get; set; } = []; }
 public static class ApiErrors { public static object Body(string error, string? field = null); }   // same result as Api/Validation/ApiErrors.Body: { error } or { error, field }
@@ -95,7 +97,7 @@ public static class ApiConventions
 {
     public const string LoginRateLimitPolicy = "login";
     public const string MustChangePasswordCode = "debeCambiarPassword";
-    public static class Claims { /* values copied from AuthService: Sub = JwtRegisteredClaimNames.Sub ("sub"), Rol = "role", Sello = "stamp", Nombre = "name" */ }
+    public static class Claims { public const string Sub = "sub"; public const string Rol = "role"; public const string Sello = "stamp"; public const string Nombre = "name"; }   // values of JwtRegisteredClaimNames.Sub and AuthService.ClaimRol/ClaimSello/ClaimNombre; the `dcp` claim stays in AuthService (kernel.md does not list it)
 }
 ```
 
@@ -104,7 +106,7 @@ namespace DairyControl.Kernel.Authorization;
 public static class Politicas { /* the six const string of Api/Authorization/Politicas.cs, same names and values: Lectura, LecturaCarga, Registro, Administracion, Autenticado, CambioPassword */ }
 ```
 
-`DairyControl.Kernel.TestSupport`: `RelojFijo` (copy of `tests/DairyControl.Application.Tests/RelojFijo.cs`, namespace `DairyControl.Kernel.TestSupport`) and `UsuarioActualFijo` (an `IUsuarioActual` with a fixed `Id` and `Rol`; constructor shape in "Open decisions").
+`DairyControl.Kernel.TestSupport`: `RelojFijo` (copy of `tests/DairyControl.Application.Tests/RelojFijo.cs`, namespace `DairyControl.Kernel.TestSupport`) and `UsuarioActualFijo` (`public sealed class UsuarioActualFijo(Guid? id, RolUsuario? rol) : IUsuarioActual`, returning the two values it was built with).
 
 ### Contract tests
 
@@ -198,7 +200,7 @@ For each of the five types, in the same PR: every `using` and reference of the m
 
 ## Issue B1-5: adopt `CambioRegistrado` from the Kernel and split `Campos`
 
-- Delete `src/DairyControl.Domain/Entities/CambioRegistrado.cs` and `tests/DairyControl.Domain.Tests/CambioRegistradoTests.cs` (covered by K1 to K5 of B1-1; move any missing case). Domain, Application and Infrastructure use `DairyControl.Kernel.Auditing.CambioRegistrado`.
+- Delete `src/DairyControl.Domain/Entities/CambioRegistrado.cs` and `tests/DairyControl.Domain.Tests/CambioRegistradoTests.cs` (covered by K1 to K5 of B1-1; move any missing case). Domain, Application and Infrastructure use `DairyControl.Kernel.Auditing.CambioRegistrado`, and every call to `CambioRegistrado.Crear(...)` becomes `CambioRegistrado.Registrar(...)` (same arguments).
 - The entity names and field names become constants of two new classes in the monolith's Domain (location in "Open decisions"): `RecepcionCampos` (`EntidadRecepcion = "Recepcion"`, `EntidadProveedor = "Proveedor"`, and the fields `proveedor, litros, grasa, acidez, temperatura, agua, silo, ticket, fechaHora, observaciones, anulacion, nombre, activo`) and `IdentidadCampos` (`EntidadUsuario = "Usuario"`, `EntidadOperario = "Operario"`, and the fields `nombre, activo, alta, rol, password, pin`). Every value is exactly the string used today, so no history row changes.
 - `CambioRegistradoConfiguration` keeps the table and columns; `Entidad` uses `CambioRegistrado.EntidadMaxLength` (20, today the literal `HasMaxLength(20)`). The B1-2 guard must stay green.
 - **Tests:** every existing correction and history test passes unchanged; new Domain test `RecepcionCampos_Constantes_SonLasDeHoy` and `IdentidadCampos_Constantes_SonLasDeHoy` asserting the strings above; an Infrastructure test that a `CambioRegistrado` with `Entidad = "Produccion"` is saved and read back (no list of names in the Kernel).
@@ -211,7 +213,7 @@ For each of the five types, in the same PR: every `using` and reference of the m
 
 - `MotivoCambioDto`, `CampoCambiadoDto`, `CorreccionDto`: delete them from `src/DairyControl.Application/DTOs/CorreccionesDtos.cs` (the other classes of that file stay) and use `DairyControl.Kernel.Contracts`.
 - `ApiErrors.Body` moves to the Kernel; `src/DairyControl.Api/Validation/ApiErrors.cs` keeps everything else (`InvalidModelState`, `UseSpanishBindingMessages`, `BodyInesperado`, the two message constants) and loses `Body`. Every controller and the middleware call `DairyControl.Kernel.Contracts.ApiErrors.Body`.
-- `ApiConventions`: `AuthService.ClaimRol/ClaimSello/ClaimNombre`, `ProteccionDeAccesoExtensions.PoliticaLogin` and `ResultadoAutorizacion.CodigoDebeCambiarPassword` are deleted and replaced by `ApiConventions.Claims.*`, `ApiConventions.LoginRateLimitPolicy` and `ApiConventions.MustChangePasswordCode` (same values). `AutenticacionExtensions`, `UsuarioActualHttp`, `AuthController` and the client contract (`debeCambiarPassword`) are unchanged in behavior.
+- `ApiConventions`: `AuthService.ClaimRol/ClaimSello/ClaimNombre`, `ProteccionDeAccesoExtensions.PoliticaLogin` and `ResultadoAutorizacion.CodigoDebeCambiarPassword` are deleted and replaced by `ApiConventions.Claims.Rol`, `.Sello`, `.Nombre` (and `.Sub` where `JwtRegisteredClaimNames.Sub` was used; `AuthService.ClaimDebeCambiarPassword` stays), `ApiConventions.LoginRateLimitPolicy` and `ApiConventions.MustChangePasswordCode` (same values). `AutenticacionExtensions`, `UsuarioActualHttp`, `AuthController` and the client contract (`debeCambiarPassword`) are unchanged in behavior.
 - **Tests:** `ApiErrorsTests` pass; `AutorizacionTests` and `SesionesYPinTests` pass unchanged; new case: the 403 body for a user that must change the password is `{"code":"debeCambiarPassword"}`.
 - **Files touched:** `CorreccionesDtos.cs`, `ApiErrors.cs`, `AuthService.cs`, `ProteccionDeAccesoExtensions.cs`, `ResultadoAutorizacion.cs`, `AutenticacionExtensions.cs`, `UsuarioActualHttp.cs`, `AuthController.cs`, controllers, the middleware and the tests that name them. **Not touched:** `client/`, the JWT contents.
 - **Rule changes** (`CLAUDE.md`), exact text: "API conventions", add `The error body is built only with `ApiErrors.Body` of `DairyControl.Kernel.Contracts`, the history DTOs (`CorreccionDto`, `CampoCambiadoDto`, `MotivoCambioDto`) are the Kernel's, and the claim names, the login rate-limit policy name and the `debeCambiarPassword` code are the constants of `ApiConventions`; a module never defines its own copy.`
@@ -234,13 +236,18 @@ For each of the five types, in the same PR: every `using` and reference of the m
 
 HTTP statuses and bodies, error messages, table and column names, the history rows already stored, JWT claims and their values, policy names, client behavior.
 
+## Decisions taken by following the contract document (the tech lead confirms or overrules them)
+
+Where `docs/contratos/kernel.md` and the current code differ, this spec follows the document, because it is the approved contract:
+
+1. `CambioRegistrado`'s factory is `Registrar(...)` (today `Crear(...)`); B1-5 renames the callers.
+2. `MotivoCambioDto.Motivo` is `string = ""` (today `string?`); the observable behavior does not change.
+3. `ApiConventions.Claims` has the four names the document lists (`sub`, `role`, `stamp`, `name`); the claim `dcp` (`AuthService.ClaimDebeCambiarPassword`) stays in `AuthService` until Identidad is moved. The constant identifiers `Sub`, `Rol`, `Sello`, `Nombre` are derived from the existing `Claim*` names.
+4. `UsuarioActualFijo` has the constructor above (the document only says "fixed `IUsuarioActual`").
+5. `HoraPlanta` and `MotivoDeCambio` live in the namespace `DairyControl.Kernel` (the block they are listed under).
+
 ## Open decisions (gaps in the approved documents; the issue that depends on each one cannot pass inspection until the tech lead answers)
 
-1. **B1-1, B1-5:** `kernel.md` says the `CambioRegistrado` factory is `Registrar(...)`; the code has `Crear(...)` and says "same shape as today". Which name?
-2. **B1-1, B1-6:** `kernel.md` defines `MotivoCambioDto.Motivo` as `string Motivo = ""` and says "today"; today it is `string? Motivo` (null when missing) and the controllers answer 400 `motivo` through the domain. Keep `string?`?
-3. **B1-1, B1-6:** the JWT also carries the claim `dcp` (`AuthService.ClaimDebeCambiarPassword`), which `kernel.md` does not list in `ApiConventions.Claims`. Is it part of the contract?
-4. **B1-1:** `UsuarioActualFijo` has no signature in `kernel.md` (constructor, nullability).
-5. **B1-1:** `kernel.md` does not say the namespace of `HoraPlanta` and `MotivoDeCambio` (this spec puts them in `DairyControl.Kernel`, the block they are listed under).
-6. **B1-5:** where `RecepcionCampos` and `IdentidadCampos` live while the module projects do not exist (this spec says "the monolith's Domain"; the folder and namespace are not defined).
-7. **B1-6:** the host keeps a class named `ApiErrors` (`DairyControl.Api.Validation`) next to `DairyControl.Kernel.Contracts.ApiErrors`; is the name clash acceptable or should the host class be renamed?
-8. **B1-1:** `ConflictoDeUnicidadException` and `DemasiadosIntentosException` constructors are described as "unchanged"; the builder copies them from the current files.
+1. **B1-5:** where `RecepcionCampos` and `IdentidadCampos` live while the module projects do not exist (this spec says "the monolith's Domain"; the folder and namespace are not defined).
+2. **B1-6:** the host keeps a class named `ApiErrors` (`DairyControl.Api.Validation`) next to `DairyControl.Kernel.Contracts.ApiErrors`; is the name clash acceptable or should the host class be renamed?
+3. **B1-1:** `ConflictoDeUnicidadException` and `DemasiadosIntentosException` constructors are described as "unchanged"; the builder copies them from the current files.
