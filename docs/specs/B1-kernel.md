@@ -248,6 +248,6 @@ Where `docs/contratos/kernel.md` and the current code differ, this spec follows 
 
 ## Open decisions (gaps in the approved documents; the issue that depends on each one cannot pass inspection until the tech lead answers)
 
-1. **B1-5:** where `RecepcionCampos` and `IdentidadCampos` live while the module projects do not exist (this spec says "the monolith's Domain"; the folder and namespace are not defined).
+1. **B1-5:** where `RecepcionCampos` and `IdentidadCampos` live while the module projects do not exist is not defined in any approved document. The issue (#31) places them in `src/DairyControl.Domain/Campos/` (namespace `DairyControl.Domain.Campos`) as the planner's choice; the tech lead confirms or changes it.
 2. **B1-6:** the host keeps a class named `ApiErrors` (`DairyControl.Api.Validation`) next to `DairyControl.Kernel.Contracts.ApiErrors`; is the name clash acceptable or should the host class be renamed?
 3. **B1-1:** `ConflictoDeUnicidadException` and `DemasiadosIntentosException` constructors are described as "unchanged"; the builder copies them from the current files.
