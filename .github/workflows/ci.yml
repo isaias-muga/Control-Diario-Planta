@@ -97,6 +97,8 @@ jobs:
     env:
       # Fixed so the images built below (cdf-api, cdf-client) are the ones `docker compose up` looks for
       COMPOSE_PROJECT_NAME: cdf
+      # Same version as @playwright/test in e2e/package-lock.json
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.64.1-noble
     steps:
       - uses: actions/checkout@v7
         with:
@@ -151,52 +153,35 @@ jobs:
         if: steps.plan.outputs.run == 'true'
         run: curl --fail --silent --show-error --retry 90 --retry-delay 2 --retry-all-errors --retry-connrefused http://localhost:8080/health
 
-      - uses: actions/setup-node@v7
+      # The tests run inside the official Playwright image on the stack's network, so CI never runs apt-get (the runners' apt mirror has been
+      # throttled to ~40 kB/s). The tag is the @playwright/test version of e2e/package-lock.json (WorkflowsTests checks it) and carries the
+      # browsers; the image has its own Node.
+      - name: Pull the Playwright image
         if: steps.plan.outputs.run == 'true'
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: e2e/package-lock.json
-
-      # The browser download is cached by the Playwright version (the lockfile); the system libraries are not part of it
-      - name: Cache the Playwright browsers
-        if: steps.plan.outputs.run == 'true'
-        id: browsers
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
+        run: docker pull "$PLAYWRIGHT_IMAGE"
 
       - name: Install
         if: steps.plan.outputs.run == 'true'
-        working-directory: e2e
-        env:
-          BROWSERS_CACHED: ${{ steps.browsers.outputs.cache-hit }}
-        run: |
-          npm ci
-          # The default Azure mirror of the runners has been throttled to ~40 kB/s at times (10 minutes for 26 MB); the archive mirror is the fallback
-          if grep -rqs "azure.archive.ubuntu.com" /etc/apt/sources.list /etc/apt/sources.list.d; then
-            sudo sed -i 's#http://azure.archive.ubuntu.com/ubuntu#http://archive.ubuntu.com/ubuntu#g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
-          fi
-          if [ "$BROWSERS_CACHED" = "true" ]; then
-            npx playwright install-deps chromium
-          else
-            npx playwright install --with-deps chromium
-          fi
+        run: >
+          docker run --rm --init --ipc=host --network cdf_default
+          -v "$PWD:/work" -w /work/e2e -e CI=true -e E2E_BASE_URL=http://client:8080
+          "$PLAYWRIGHT_IMAGE" npm ci
 
       - name: Run e2e tests
         if: steps.plan.outputs.run == 'true'
-        working-directory: e2e
-        run: npx playwright test
+        run: >
+          docker run --rm --init --ipc=host --network cdf_default
+          -v "$PWD:/work" -w /work/e2e -e CI=true -e E2E_BASE_URL=http://client:8080
+          "$PLAYWRIGHT_IMAGE" npx playwright test
 
       # The race detector: CI is slower than a developer machine, and a test that acts on a control before its data has arrived passes by
       # luck. Every /api response is delayed; add here the specs of any flow that loads data when its page opens (see CLAUDE.md, E2E tests).
       - name: Run the data-loading flows with a slow API
         if: steps.plan.outputs.run == 'true'
-        working-directory: e2e
-        env:
-          E2E_API_LATENCY_MS: "400"
-        run: npx playwright test carga-rapida roles correcciones cuentas-protegidas dialogos
+        run: >
+          docker run --rm --init --ipc=host --network cdf_default
+          -v "$PWD:/work" -w /work/e2e -e CI=true -e E2E_BASE_URL=http://client:8080 -e E2E_API_LATENCY_MS=400
+          "$PLAYWRIGHT_IMAGE" npx playwright test carga-rapida roles correcciones cuentas-protegidas dialogos
 
       - name: Upload Playwright report
         if: failure()

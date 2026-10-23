@@ -102,6 +102,24 @@ namespace DairyControl.ArchitectureTests
         }
 
         [Fact]
+        public void Ci_PlaywrightImage_MatchesTheVersionOfTheLockfile()
+        {
+            // Arrange: the e2e tests run in the official Playwright image, whose browsers must match @playwright/test
+            var texto = SinComentarios(Path.Combine(CarpetaDeWorkflows, "ci.yml"));
+            var bloqueo = File.ReadAllText(Path.Combine(Proyecto.Raiz, "e2e", "package-lock.json"));
+
+            // Act
+            var enImagen = Regex.Match(texto, @"mcr\.microsoft\.com/playwright:v([\d.]+)-").Groups[1].Value;
+            var enBloqueo = Regex.Match(bloqueo, @"""node_modules/@playwright/test"":\s*\{\s*""version"":\s*""([\d.]+)""").Groups[1].Value;
+
+            // Assert
+            Assert.NotEmpty(enImagen);
+            Assert.Equal(enBloqueo, enImagen);
+            Assert.DoesNotContain("apt-get", texto);
+            Assert.DoesNotContain("--with-deps", texto);
+        }
+
+        [Fact]
         public void WorkflowsFolder_HasNoOtherDeployWorkflow()
         {
             // Act
