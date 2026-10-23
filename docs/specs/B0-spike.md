@@ -58,6 +58,7 @@ The report must end with these four items, each one a plain sentence, so that B1
 | M4 | `context.Database.HasPendingModelChanges()` on the unchanged model (M1) and on the changed one (M2), with a connection string that points to a server that does not exist | Does it need to open a connection? Return value in both cases. (B1 builds its guard test on this.) |
 | M5 | A context type with an **empty** model (no entities) that uses the snapshot of `AppDbContext` through `MigrationsAssembly` and `Migrate()` | Does it throw? Which message? Does the snapshot/model mismatch behave like M2? |
 | M6 | Two projects that both define `DairyControl.Infrastructure.Persistence.AppDbContext`, and a third project that references both (the old migrations refer to the type through the project-level `<Using>` of the csproj) | The compiler error or warning ids (for example CS0436 or CS0104) and whether `TreatWarningsAsErrors` turns them into an error. |
+| M8 | Map one table with `ToTable(name, "dbo")` in a copy of `AppDbContext` and call `HasPendingModelChanges()` against the real snapshot (it has no explicit schema) | Is there a pending change? If yes, record the fallback for B1b-3 (a migration is NOT allowed: the decision goes to the tech lead; a null schema in `MapHistory` would be a Kernel.Persistence contract change). |
 | M7 | Same as M6 when only one of the two projects is referenced by the project that holds the migrations | Does it compile? (This is the shape ADR 0005 chooses for `Legado`.) |
 
 ### Decisión (required section of the report)

@@ -78,7 +78,8 @@ Behavior of `AddModuleDbContext`: `services.AddDbContext<TContext>(options => op
 - **Touches:** `DairyControl.slnx`, the new project, `tests/Kernel/DairyControl.Kernel.Tests` (project reference, new test files), `src/DairyControl.Api/Dockerfile` (the `COPY` of the new csproj in the restore block, because B1b-3 makes Infrastructure reference it).
 - **Does not touch:** `src/DairyControl.Infrastructure`, `src/DairyControl.Domain`, migrations, `CLAUDE.md`, the monolith's tests.
 - **Migrations:** no.
-- **Rule changes:** `none` (the rules change in B1b-3).
+- **Test database:** P9 and H1 to H5 need a database provider. `Kernel.Tests` gets the SQLite package and the fixture of the `Decisión` section of the B0-1 report (copied from `tests/DairyControl.Infrastructure.Tests`, where B0-1 prototypes it). H1 to H4 use that fixture; H5 repeats them with a non-default schema.
+- **Rule changes** (`CLAUDE.md`, "Testing"): the bullet "Only `DairyControl.Infrastructure.Tests` may use a database ..." becomes `Only `DairyControl.Infrastructure.Tests` and `tests/Kernel/DairyControl.Kernel.Tests` (for `Kernel.Persistence` only) may use a database, and only an in-memory SQLite one.` Also "Project structure": add `src/Kernel/DairyControl.Kernel.Persistence` (EF Core and SQL Server helpers for module `DbContext`s).
 
 ## Issue B1b-2: `HistorialQueriesBase` and `UnicidadSql`
 
@@ -146,6 +147,6 @@ The model of `AppDbContext` (checked by the guard), every query result, the hist
 2. **B1b-1:** `EnableRetryOnFailure` uses the numbers of `AddInfrastructure` (10 retries, 30 s).
 3. **B1b-1:** a `null` `schema` or `connectionString` throws `ArgumentNullException`, an empty or whitespace one `InvalidOperationException`.
 
-## Open decisions
+## Dependencies
 
 1. **B1b-1, B1b-2:** the strategy for tests on SQLite with schemas comes from the `Decisión` section of the B0-1 report, which does not exist yet (this is a dependency on B0, not a gap).

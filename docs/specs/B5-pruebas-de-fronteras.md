@@ -64,7 +64,7 @@ ADR 0008 points 1, 2, 5, 6, 9 and 10, as pure rules over the model.
 | Rule | Statement | Applies to |
 |---|---|---|
 | R1 References | A project of module M references only projects of M, `DairyControl.Kernel`, `DairyControl.Kernel.Persistence` (only from an `Infrastructure` project) and the `Contracts` projects of other modules. Never another module's `Domain`, `Application`, `Infrastructure` or `Api` | `src/` |
-| R1b Layers inside a module | `Domain` references only the BCL and `DairyControl.Kernel`; `Application` references its `Domain`, `DairyControl.Kernel` and `Contracts` of other modules; `Infrastructure` references its `Application`, `Domain`, `Kernel`, `Kernel.Persistence`; `Api` references its `Application`, its `Contracts`, `Kernel` (and, only for the host, the `*.Api` of each module) | `src/` |
+| R1b Layers inside a module | `Domain` references only the BCL and `DairyControl.Kernel`; `Application` references its `Domain`, `DairyControl.Kernel` and `Contracts` of other modules; `Infrastructure` references its `Application`, `Domain`, `Kernel`, `Kernel.Persistence`; `Api` references its `Application`, its `Contracts`, `Kernel` (and, only for the host, the `*.Api` of each module and its own `Infrastructure`, because it is the composition root and today `DairyControl.Api` references `DairyControl.Infrastructure`) | `src/` |
 | R2 Contracts content | A `*.Contracts` project contains only interfaces, DTO classes (public get/set properties, no methods other than the compiler's) and `ContractVersionAttribute` usage | `src/` |
 | R2b Contract versions | Each interface in a `*.Contracts` project has `[ContractVersion]`; its version equals the fourth column of the row whose first cell is the backticked interface name in the table under the heading `Quién usa a quién` of `docs/modulos.md`; a project that references a `Contracts` assembly whose interface is at version `0.x` fails | `src/` |
 | R5 Exceptions | Every exception type in a module's `Domain` derives from `ConflictoException` or `AccesoDenegadoDeDominioException` (the other categories are sealed and used directly) | `src/` |
@@ -138,6 +138,6 @@ Nothing in `src/`. The existing architecture rules keep their meaning; they only
 2. **B5-2:** the exceptions-list `Cantidad` counts one violation per offending reference or type, as the rule reports it.
 3. **B5-3:** the model of every `DbContext` found in an `Infrastructure` assembly is built with the technique of `ModeloContraSnapshotTests` (B1-2): the constructor taking `DbContextOptions<T>` with the SQL Server provider, never opened. The negative control is a fake model, so the rule is never empty while only `AppDbContext` exists.
 
-## Open decisions
+## Planner's choice (not answered by the tech lead)
 
 1. **B5-2, B5-3:** ADR 0008 lists exceptions that need two modules (the transitional project referencing both, tests that create an audit user from Identidad's domain). With Legado as one pseudo-module those cannot be detected now. This spec leaves them to B3 and B4 and uses `TablasPorModulo` (not in any approved document) only to make the five foreign keys and the shared history table visible. The tech lead did not answer this one: it stands as the planner's choice unless the PR review objects.
