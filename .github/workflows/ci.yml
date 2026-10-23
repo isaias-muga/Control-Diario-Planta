@@ -174,6 +174,10 @@ jobs:
           BROWSERS_CACHED: ${{ steps.browsers.outputs.cache-hit }}
         run: |
           npm ci
+          # The default Azure mirror of the runners has been throttled to ~40 kB/s at times (10 minutes for 26 MB); the archive mirror is the fallback
+          if grep -rqs "azure.archive.ubuntu.com" /etc/apt/sources.list /etc/apt/sources.list.d; then
+            sudo sed -i 's#http://azure.archive.ubuntu.com/ubuntu#http://archive.ubuntu.com/ubuntu#g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
+          fi
           if [ "$BROWSERS_CACHED" = "true" ]; then
             npx playwright install-deps chromium
           else
