@@ -1,4 +1,3 @@
-using DairyControl.Kernel;
 using DairyControl.Kernel.Auditing;
 using DairyControl.Kernel.Exceptions;
 

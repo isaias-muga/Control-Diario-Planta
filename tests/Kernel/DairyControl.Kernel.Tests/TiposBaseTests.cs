@@ -1,5 +1,4 @@
 using System.Text.Json;
-using DairyControl.Kernel;
 using DairyControl.Kernel.Authorization;
 using DairyControl.Kernel.Contracts;
 using DairyControl.Kernel.Exceptions;
@@ -59,6 +58,7 @@ public class TiposBaseTests
 
     // ---- K7 exception categories ----
     private sealed class AccesoDenegadoFalso() : AccesoDenegadoDeDominioException("no");
+    private sealed class ConflictoFalso() : ConflictoException("choque");
 
     [Fact]
     public void Excepciones_Categorias_DerivanDeLaCategoriaCorrecta()
@@ -69,6 +69,7 @@ public class TiposBaseTests
         Assert.IsAssignableFrom<ConflictoException>(new ConflictoDeConcurrenciaException());
         Assert.IsAssignableFrom<ConflictoException>(new ConflictoDeUnicidadException("m"));
         Assert.IsAssignableFrom<ExcepcionDeDominio>(new AccesoDenegadoFalso());
+        Assert.IsAssignableFrom<ExcepcionDeDominio>(new ConflictoFalso());
         Assert.IsAssignableFrom<ExcepcionDeDominio>(new DemasiadosIntentosException("m"));
         Assert.Equal("c", new ReglaDeNegocioException("m", "c").Campo);
         Assert.Null(new ReglaDeNegocioException("m").Campo);
