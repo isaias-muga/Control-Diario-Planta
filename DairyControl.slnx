@@ -8,4 +8,7 @@
   <Project Path="tests/DairyControl.Application.Tests/DairyControl.Application.Tests.csproj" />
   <Project Path="tests/DairyControl.Infrastructure.Tests/DairyControl.Infrastructure.Tests.csproj" />
   <Project Path="tests/DairyControl.Domain.Tests/DairyControl.Domain.Tests.csproj" />
+  <Project Path="src/Kernel/DairyControl.Kernel/DairyControl.Kernel.csproj" />
+  <Project Path="src/Kernel/DairyControl.Kernel.TestSupport/DairyControl.Kernel.TestSupport.csproj" />
+  <Project Path="tests/Kernel/DairyControl.Kernel.Tests/DairyControl.Kernel.Tests.csproj" />
 </Solution>
